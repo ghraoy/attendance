@@ -53,10 +53,10 @@ const opt = (v, cur, label) => `<option value="${esc(v)}" ${String(v) === String
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /* ===== routing ===== */
-const VIEWS = ["overview", "today", "log", "timetable", "import", "ai", "setup", "new"];
+const VIEWS = ["overview", "today", "log", "timetable", "import", "ai", "setup", "new", "about"];
 const view = () => { const h = location.hash.slice(1); return VIEWS.includes(h) ? h : "overview"; };
 function render() {
-  const v = !R() && !["new", "import", "setup"].includes(view()) ? "welcome" : view();
+  const v = !R() && !["new", "import", "setup", "about"].includes(view()) ? "welcome" : view();
   $$("nav a").forEach(a => a.setAttribute("aria-current", a.getAttribute("href") === "#" + v ? "page" : "false"));
   // register switcher
   const sw = $("#regSel");
@@ -64,7 +64,7 @@ function render() {
   sw.hidden = !DB.registers.length;
   $("#termLine").textContent = R() ? [R().meta.college, R().meta.year && "العام " + R().meta.year].filter(Boolean).join(" · ") : "سجل الحضور والغياب الجامعي";
   $("#addBtn").hidden = !R();
-  const fn = { welcome, overview, today: todayView, log: logView, timetable: timetableView, import: importView, ai: aiView, setup: setupView, new: wizardView }[v];
+  const fn = { welcome, overview, today: todayView, log: logView, timetable: timetableView, import: importView, ai: aiView, setup: setupView, new: wizardView, about: aboutView }[v];
   $("#main").innerHTML = fn();
   bind(v); syncBadge();
 }
@@ -76,7 +76,55 @@ function welcome() {
     <p class="muted" style="margin:0;max-width:56ch">لأي قسم ولأي مرحلة: دراسات أولية (صباحي أو مسائي) أو دراسات عليا. تُعرّف المواد وجدولها الأسبوعي والتقويم وقواعد الإنذار، ثم تسجّل الحضور فيحسب البرنامج الساعات والنسب والإنذارات.</p>
     ${C.drive.clientId && !C.account ? `<button class="btn primary" id="signInBig" type="button" style="font-size:1.05rem;padding:10px 22px">تسجيل الدخول بحساب Google</button>
     <p class="muted small" style="margin:0;max-width:52ch">إذا كان لديك حساب سابق تُسترجع كل سجلاتك وإعداداتك تلقائياً. البيانات تُحفظ في Google Drive الخاص بك فقط.</p>` : ""}
-    <div class="row" style="justify-content:center"><a class="btn ${C.account ? "primary" : ""}" href="#new">إنشاء سجل جديد خطوة بخطوة</a><a class="btn" href="#import">استيراد نموذج Excel معبّأ</a></div></div>`;
+    <div class="row" style="justify-content:center"><a class="btn ${C.account ? "primary" : ""}" href="#new">إنشاء سجل جديد خطوة بخطوة</a><a class="btn" href="#import">استيراد نموذج Excel معبّأ</a></div>
+    <div class="sig" style="margin-top:6px"><small>برمجة وتصميم</small><b>${AUTHOR}</b></div></div>`;
+}
+
+/* ===== about · credits · license · consent ===== */
+const AUTHOR = "م.م. سجاد مهدي الغراوي", AUTHOR_EN = "Asst. Lect. Sajjad Mahdi Al-Gharawi", TERMS_V = 1;
+function aboutView() {
+  const cite = `${AUTHOR} (2026). سجل الحضور الجامعي — تطبيق لحساب الحضور والغياب والإنذارات، الإصدار ${APP_VERSION}. متاح على: https://ghraoy.github.io/attendance`;
+  return `<div class="panel hero"><img src="icon-192.png" alt="">
+    <h2>سجل الحضور الجامعي</h2>
+    <div class="muted small">الإصدار ${APP_VERSION} · تطبيق ويب تقدّمي يعمل على الحاسبة والأندرويد، مع الإنترنت وبدونه</div>
+    <div class="sig"><small>برمجة وتصميم</small><b>${AUTHOR}</b><small dir="ltr">Designed &amp; developed by ${AUTHOR_EN}</small></div>
+    <div class="tags"><span>دراسات أولية وعليا</span><span>حساب الساعات والإنذارات</span><span>نماذج Excel</span><span>Google Drive</span><span>يعمل بلا إنترنت</span><span>مساعد ذكي</span></div>
+  </div>
+  <div class="panel"><h3>الترخيص والوثائق</h3>
+    <p class="small" style="margin:0">© 2026 ${AUTHOR} — جميع الحقوق محفوظة. الاستخدام <b>مجاني</b> للجامعات والأقسام وللأفراد في الأغراض التعليمية والإدارية غير التجارية، بشرط بقاء عبارة الإسناد ظاهرة، ولا يجوز بيعه أو إعادة نشره بهوية أخرى إلا بإذن كتابي من المؤلف.</p>
+    <div class="cards"><a href="license.html"><b>رخصة الاستخدام</b><span>الشروط الكاملة بالعربية والإنكليزية</span></a><a href="terms.html"><b>شروط الاستخدام</b><span>طبيعة التطبيق ومسؤولية المستخدم</span></a><a href="privacy.html"><b>سياسة الخصوصية</b><span>بياناتك على جهازك وفي Drive حسابك فقط</span></a></div>
+  </div>
+  <div class="panel"><h3>موافقتك</h3>
+    <p class="small" style="margin:0">${C.consent ? `وافقت على شروط الاستخدام وسياسة الخصوصية في ${fmtDate(C.consent.at.slice(0, 10))} على هذا الجهاز.` : "لم تُسجَّل موافقة بعد على هذا الجهاز."}</p>
+    <div class="row"><button class="btn" id="reConsent" type="button">مراجعة الشروط والموافقات</button></div>
+  </div>
+  <div class="panel"><h3>عند الإشارة إلى التطبيق</h3>
+    <p class="small" style="margin:0">في بحث أو تقرير أو كتاب رسمي يمكنك ذكره هكذا:</p>
+    <div class="banner ok" style="margin:0;unicode-bidi:plaintext" id="citeTxt">${esc(cite)}</div>
+    <div class="row"><button class="btn" id="citeCopy" type="button">نسخ</button></div>
+  </div>
+  <div class="panel"><h3>شكر وتقدير</h3>
+    <p class="small muted" style="margin:0">بُني باستخدام مكوّنات مفتوحة المصدر: SheetJS (Apache 2.0) وExcelJS (MIT)، وخطّي IBM Plex Sans Arabic وNoto Kufi Arabic (OFL). ويعتمد في مزامنته على Google Drive، وفي مساعده الاختياري على Gemini وChatGPT وClaude.</p>
+    <p class="small" style="margin:0">صُنع بعناية لخدمة الأقسام العلمية وطلبتها 🌿</p>
+  </div>`;
+}
+function showConsent(force) {
+  if (!force && C.consent && C.consent.v >= TERMS_V) return;
+  const d = $("#consentDlg"); if (!d || d.open) return;
+  $("#consentForm").innerHTML = `<div class="top-mark"><img src="icon-192.png" alt=""><div><h3>أهلاً بك في سجل الحضور الجامعي</h3><div class="muted small">برمجة وتصميم: ${AUTHOR}</div></div></div>
+    <ul><li>التطبيق أداة مساعدة للحساب؛ والقرار الرسمي (إنذار أو حرمان) للجهة المختصة وفق تعليماتها.</li>
+    <li>بياناتك تُحفظ على جهازك، وفي Google Drive حسابك إن سجّلت الدخول. لا تصل إلى المؤلف ولا إلى أي خادم آخر.</li>
+    <li>المساعد الذكي اختياري، وما ترسله إليه يذهب مباشرة إلى الخدمة التي تختارها.</li>
+    <li>الاستخدام مجاني للأغراض التعليمية والإدارية مع بقاء عبارة الإسناد.</li></ul>
+    <label><input type="checkbox" id="cTerms"><span>قرأت <a href="terms.html" target="_blank">شروط الاستخدام</a> و<a href="license.html" target="_blank">رخصة الاستخدام</a> وأوافق عليهما.</span></label>
+    <label><input type="checkbox" id="cPriv"><span>اطّلعت على <a href="privacy.html" target="_blank">سياسة الخصوصية</a>، وأتعهّد بحماية بيانات الطلبة واستخدامها للمتابعة الأكاديمية فقط.</span></label>
+    <div class="row"><button class="btn primary" id="cOk" type="button" disabled>أوافق وأبدأ</button>${force && C.consent ? `<button class="btn" id="cClose" type="button">إغلاق</button>` : ""}</div>`;
+  const upd = () => { $("#cOk").disabled = !($("#cTerms").checked && $("#cPriv").checked); };
+  $("#cTerms").onchange = upd; $("#cPriv").onchange = upd;
+  $("#cOk").onclick = () => { const first = !C.consent; C.consent = { v: TERMS_V, at: new Date().toISOString() }; saveCfg(); d.close(); if (first) toast("أهلاً بك — بالتوفيق في عملك"); render(); };
+  if ($("#cClose")) $("#cClose").onclick = () => d.close();
+  d.addEventListener("cancel", e => { if (!C.consent) e.preventDefault(); }, { once: true });
+  d.showModal();
 }
 
 /* ===== overview ===== */
@@ -368,7 +416,7 @@ function setupView() {
    <p class="muted small" style="margin:0">التطبيق يعمل بالكامل بدون إنترنت، وأي تغيير يُرفع تلقائياً عند الاتصال. «تسجيل الخروج ومسح هذا الجهاز» للأجهزة المشتركة: بياناتك تبقى محفوظة في حسابك.</p>
    <details class="small"><summary>إعدادات متقدمة</summary><label class="field" style="margin-top:8px">Google OAuth Client ID<input id="cid" value="${esc(C.drive.clientId || "")}" style="direction:ltr"></label></details></section>
    <section class="panel"><h2 style="margin:0">التحديثات</h2>
-   <p class="muted small" style="margin:0">التطبيق يتحدّث تلقائياً عند فتحه، ولا تفقد بياناتك. الإصدار الحالي: <b>${APP_VERSION}</b></p>
+   <p class="muted small" style="margin:0">التطبيق يتحدّث تلقائياً عند فتحه، ولا تفقد بياناتك. الإصدار الحالي: <b>${APP_VERSION}</b> · <a href="#about">حول التطبيق والترخيص</a></p>
    <div class="row"><button class="btn" id="updBtn" type="button">البحث عن تحديث الآن</button></div></section>
    ${r ? `<section class="panel"><h2 style="margin:0">حذف</h2><div class="row"><button class="btn danger" id="delReg" type="button">حذف هذا السجل</button><button class="btn danger" id="wipeBtn" type="button">مسح كل السجلات</button></div>
    <p class="muted small" style="margin:0">احفظ نسخة احتياطية من «إدخال البيانات» قبل الحذف.</p></section>` : ""}`;
@@ -406,6 +454,7 @@ function wizardView() {
 /* ===== bindings ===== */
 function bind(v) {
   if ($("#signInBig")) $("#signInBig").onclick = () => syncNow(true);
+  if (v === "about") { $("#reConsent").onclick = () => showConsent(true); $("#citeCopy").onclick = () => copy($("#citeTxt").textContent); }
   if (v === "overview" && $("#xlsx")) { $("#xlsx").onclick = () => saveFile(`${Core.registerName(R())} ${today()}.xlsx`, Template.build(R()), XLSX_TYPE); $("#xlsxDrive").onclick = sheetToDrive; }
   if (v === "today") {
     $("#dayPick").onchange = e => { ui.day = e.target.value || today(); render(); };
@@ -723,7 +772,7 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
@@ -735,3 +784,5 @@ if (DB.registers.length && !DB.current) DB.current = DB.registers[0].id;
 store(KEY, DB);
 render();
 flushQueue();
+showConsent();
+console.log("%cسجل الحضور الجامعي %c" + APP_VERSION + "\n%cبرمجة وتصميم: " + AUTHOR + " · © 2026", "font:700 16px sans-serif;color:#0e6a66", "color:#888", "font:13px sans-serif;color:#152b3c");

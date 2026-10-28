@@ -1,7 +1,7 @@
 {
   "name": "سجل الحضور الجامعي",
   "short_name": "سجل الحضور",
-  "description": "سجل حضور وغياب لأي قسم ومرحلة مع حساب الساعات والإنذارات والمزامنة مع Google Drive",
+  "description": "سجل حضور وغياب لأي قسم ومرحلة مع حساب الساعات والإنذارات والمزامنة مع Google Drive — برمجة وتصميم: م.م. سجاد مهدي الغراوي",
   "lang": "ar",
   "dir": "rtl",
   "start_url": "./",
@@ -10,7 +10,17 @@
   "background_color": "#f3f6f5",
   "theme_color": "#0e6a66",
   "icons": [
-    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }

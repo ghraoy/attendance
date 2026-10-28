@@ -36,7 +36,7 @@ window.Template = (() => {
   const inp = o => ({ fill: INPUT, ...o });
 
   async function build(R) {
-    const wb = new ExcelJS.Workbook(); wb.creator = "سجل الحضور"; wb.created = new Date();
+    const wb = new ExcelJS.Workbook(); wb.creator = "م.م. سجاد مهدي الغراوي"; wb.lastModifiedBy = "سجل الحضور الجامعي"; wb.company = "سجل الحضور الجامعي — برمجة وتصميم م.م. سجاد مهدي الغراوي"; wb.created = new Date();
     const m = R?.meta || {}, cal = R?.calendar || { dutyDays: [0, 1, 2, 3, 4], holidays: [] }, rl = R?.rules || Core.PRESETS["أولية"];
     const subjects = R?.subjects || [], students = R?.students || [];
     const NS = Math.max(15, subjects.length + 5), NT = Math.max(60, students.length + 20);
@@ -55,9 +55,11 @@ window.Template = (() => {
       ["5) أوراق «كشف 1، كشف 2 …»: كشف لكل مادة بنفس ترتيب ورقة المواد. الطلبة في الصفوف وتواريخ المحاضرات في الأعمدة، تُولَّد تلقائياً من جدول المادة وتاريخي الفصل. اكتب غ للغائب، م للمجاز، ح للحاضر (أو اتركها فارغة).", ""],
       ["6) ورقة «الملخص»: ساعات الغياب والساعات المقررة والنسبة لكل طالب في كل مادة، والنسبة الكلية والحالة (ضمن الحد / إنذار أولي / إنذار ثانٍ / حرمان).", ""],
       ["الغياب في يوم ليس يوم دوام لا يُحسب. الغياب بعذر (مجاز) لا يُحسب إلا إذا اخترت ذلك في الإعدادات.", ""],
-      ["التطبيق: https://ghraoy.github.io/attendance/ — استورد هذا الملف من «إدخال البيانات» فيُنشأ السجل كاملاً، ويمكنك تصديره بنفس الشكل.", ""]
+      ["التطبيق: https://ghraoy.github.io/attendance/ — استورد هذا الملف من «إدخال البيانات» فيُنشأ السجل كاملاً، ويمكنك تصديره بنفس الشكل.", ""],
+      ["", ""],
+      ["برمجة وتصميم: م.م. سجاد مهدي الغراوي — © 2026 جميع الحقوق محفوظة. الاستخدام مجاني للأغراض التعليمية والإدارية مع بقاء هذا الإسناد.", "c"]
     ];
-    lines.forEach(([t, k], i) => { const c = rd.getCell(i + 1, 1); c.value = t; c.alignment = { horizontal: "right", vertical: "middle", wrapText: true }; c.font = { name: FONT, size: k === "t" ? 15 : 11, bold: k !== "", color: { argb: k === "t" ? HEAD : INK } }; rd.getRow(i + 1).height = k === "t" ? 30 : 22; });
+    lines.forEach(([t, k], i) => { const c = rd.getCell(i + 1, 1); c.value = t; c.alignment = { horizontal: "right", vertical: "middle", wrapText: true }; c.font = { name: FONT, size: k === "t" ? 15 : 11, bold: k !== "", color: { argb: k === "t" || k === "c" ? HEAD : INK } }; rd.getRow(i + 1).height = k === "t" ? 30 : 22; });
 
     /* ---- الإعدادات ---- */
     const st = sheet(wb, "الإعدادات", [44, 34, 52]);
