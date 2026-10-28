@@ -101,20 +101,21 @@ function overview() {
       <div class="kv"><span>باقي حتى الإنذار الأولي (${w1}%)</span><strong class="${a.left1 ? "" : "w"}">${a.left1 ? a.left1 + " ساعة" : "تجاوزه"}</strong></div>
       <div class="kv"><span>باقي حتى الإنذار الثاني (${w2}%)</span><strong class="${a.left2 ? "" : "d"}">${a.left2 ? a.left2 + " ساعة" : "تجاوزه"}</strong></div>
       <div class="kv"><span>نسبة الغياب الكلية</span><strong class="${lv}">${pct(a.rate)}</strong></div>
-      ${worst && worst.abs ? `<div class="kv"><span>أعلى مادة</span><span class="${level(worst.rate)}">${esc(worst.name)} · ${pct(worst.rate)}</span></div>` : ""}
+      ${levelText(a.rate) ? `<div class="banner ${lv === "d" ? "err" : ""}" style="padding:4px 10px">${levelText(a.rate)}</div>` : ""}
+      ${worst && worst.abs ? `<div class="kv"><span>أعلى مادة</span><span>${esc(worst.name)} · ${pct(worst.rate)}</span></div>` : ""}
     </div>`;
   }).join("");
   const head = S.students.map(s => `<th>${esc(short(s.name))}</th>`).join("");
   const rows = S.subjects.map(su => `<tr><td class="l"><strong>${esc(su.name)}</strong><br><small class="muted">${su.hours} س/محاضرة</small></td>${S.students.map(st => {
     if ((st.exempt || []).includes(su.id)) return `<td><span class="pill p-E">مستوفية</span></td>`;
     const b = stats(st.id, su.id); if (!b.req) return `<td class="muted">—</td>`;
-    return `<td><span class="cell ${level(b.rate)}"><strong>${b.abs} / ${b.req}</strong><small>${b.habs} من ${b.htot} س · ${pct(b.rate)}</small></span></td>`;
+    return `<td><span class="cell"><strong>${b.abs} / ${b.req}</strong><small>${b.habs} من ${b.htot} س · ${pct(b.rate)}</small></span></td>`;
   }).join("")}</tr>`).join("");
-  const foot = S.students.map(st => { const a = stats(st.id); return `<td>${a.habs} / ${a.htot} س</td>`; }).join("");
+  const foot = S.students.map(st => { const a = stats(st.id); return `<td><span class="cell ${level(a.rate)}"><strong>${pct(a.rate)}</strong><small>${a.habs} / ${a.htot} س${levelText(a.rate) ? " · " + levelText(a.rate) : ""}</small></span></td>`; }).join("");
   return `<section><div class="row"><h2>الطلبة</h2><span class="spacer"></span><span class="muted small">الإنذار الأولي ${w1}% · الثاني ${w2}% من ساعات الفصل</span></div><div class="cards">${cards}</div></section>
   <section><div class="row"><h2>الغياب حسب المادة</h2><span class="spacer"></span><button class="btn small" id="xlsx" type="button">تنزيل Excel</button><button class="btn small" id="xlsxDrive" type="button">رفع نسخة إلى Drive</button></div>
-  <div class="scroll"><table><thead><tr><th class="l">المادة</th>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="l">ساعات الغياب / ساعات الفصل</td>${foot}</tr></tfoot></table></div>
-  <p class="muted small" style="margin:8px 0 0">في كل خانة: الغيابات / المحاضرات التي أُعطيت، وتحتها ساعات الغياب من مجموع ساعات الفصل المقررة (${term().weeks} أسبوعاً حسب التقويم) والنسبة. البرتقالي = تجاوز الإنذار الأولي، والأحمر = تجاوز الإنذار الثاني.</p></section>`;
+  <div class="scroll"><table><thead><tr><th class="l">المادة</th>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="l">النسبة الكلية (كل المواد)</td>${foot}</tr></tfoot></table></div>
+  <p class="muted small" style="margin:8px 0 0">في كل خانة: الغيابات / المحاضرات التي أُعطيت، وتحتها ساعات الغياب من مجموع ساعات الفصل المقررة (${term().weeks} أسبوعاً حسب التقويم) والنسبة. الإنذارات تُحسب من النسبة الكلية لكل طالب (مجموع كل المواد)، وتظهر في بطاقته أعلاه.</p></section>`;
 }
 
 function logView() {
@@ -515,7 +516,7 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-const APP_VERSION = "v6";
+const APP_VERSION = "v7";
 // Updates install themselves: a new service worker takes over and the page reloads once.
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
