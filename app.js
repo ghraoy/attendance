@@ -113,7 +113,7 @@ function overview() {
   const foot = S.students.map(st => { const a = stats(st.id); return `<td>${a.habs} / ${a.htot} س</td>`; }).join("");
   return `<section><div class="row"><h2>الطلبة</h2><span class="spacer"></span><span class="muted small">الإنذار الأولي ${w1}% · الثاني ${w2}% من ساعات الفصل</span></div><div class="cards">${cards}</div></section>
   <section><div class="row"><h2>الغياب حسب المادة</h2><span class="spacer"></span><button class="btn small" id="xlsx" type="button">تنزيل Excel</button><button class="btn small" id="xlsxDrive" type="button">رفع نسخة إلى Drive</button></div>
-  <div class="scroll"><table><thead><tr><th class="l">المادة</th>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="l">ساعات الغياب / المطالب بها</td>${foot}</tr></tfoot></table></div>
+  <div class="scroll"><table><thead><tr><th class="l">المادة</th>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="l">ساعات الغياب / ساعات الفصل</td>${foot}</tr></tfoot></table></div>
   <p class="muted small" style="margin:8px 0 0">في كل خانة: الغيابات / المحاضرات التي أُعطيت، وتحتها ساعات الغياب من مجموع ساعات الفصل المقررة (${term().weeks} أسبوعاً حسب التقويم) والنسبة. البرتقالي = تجاوز الإنذار الأولي، والأحمر = تجاوز الإنذار الثاني.</p></section>`;
 }
 
