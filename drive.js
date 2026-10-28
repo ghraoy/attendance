@@ -36,7 +36,7 @@ window.Drive = (() => {
     const r = await fetch(path.startsWith("http") ? path : "https://www.googleapis.com/drive/v3/" + path,
       { ...opts, headers: { Authorization: "Bearer " + token, ...(opts.headers || {}) } });
     if (r.status === 401) { token = null; throw new Error("انتهت جلسة Google — اضغط مزامنة مرة أخرى"); }
-    if (!r.ok) { let m = r.status; try { m = (await r.json()).error.message; } catch (e) {} throw new Error("Drive: " + m); }
+    if (!r.ok) { if (r.status === 404 && opts.allow404) return null; let m = r.status; try { m = (await r.json()).error.message; } catch (e) {} throw new Error("Drive: " + m); }
     return r;
   }
   const q = s => encodeURIComponent(s);
@@ -64,16 +64,16 @@ window.Drive = (() => {
   }
 
   async function pull(cfg) {
-    const f = await findFile(cfg); if (!f) return null;
+    const f = await findFile(cfg); if (!f) { cfg.fileId = null; return null; }
     cfg.fileId = f.id;
     return (await api(`files/${f.id}?alt=media`)).json();
   }
   async function push(cfg, state) {
     const body = JSON.stringify(state);
     if (!cfg.fileId) { const f = await findFile(cfg); if (f) cfg.fileId = f.id; }
-    if (cfg.fileId) {
-      await api(`https://www.googleapis.com/upload/drive/v3/files/${cfg.fileId}?uploadType=media`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
-    } else {
+    // a saved file id can go stale (file deleted, trashed, or made by an older app version / another account): fall back to creating it
+    if (cfg.fileId && !(await api(`https://www.googleapis.com/upload/drive/v3/files/${cfg.fileId}?uploadType=media`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body, allow404: true }))) cfg.fileId = null;
+    if (!cfg.fileId) {
       const fid = await folderId(cfg);
       const m = multipart({ name: FILE, parents: [fid], mimeType: "application/json" }, body, "application/json");
       const j = await (await api("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", { method: "POST", ...m })).json();
