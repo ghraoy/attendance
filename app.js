@@ -50,7 +50,16 @@ function stats(stuId, subId) {
     const h = +(subj(se.subject)?.hours || 0);
     req++; hreq += h; if (st === "A") { abs++; habs += h; dates.push(se.date); }
   }
-  return { req, abs, hreq, habs, rate: hreq ? habs / hreq : 0, dates: dates.sort() };
+  // planned semester hours (official calendar): weeks this student is required × lectures/week × hours
+  let htot = 0;
+  for (const su of (subId ? [subj(subId)] : S.subjects)) if (su && !(stu.exempt || []).includes(su.id)) htot += studentWeeks(stu) * (+su.perWeek || 1) * (+su.hours || 0);
+  return { req, abs, hreq, habs, htot, rate: htot ? habs / htot : 0, left: Math.max(0, Math.floor(htot * S.settings.threshold / 100 - habs)), dates: dates.sort() };
+}
+const term = () => ({ start: S.settings.termStart || "2026-09-20", end: S.settings.termEnd || "2026-12-31", weeks: +S.settings.termWeeks || 15 });
+function studentWeeks(stu) {
+  const t = term(); if (!stu.start || stu.start <= t.start) return t.weeks;
+  const days = (new Date(t.end + "T12:00:00") - new Date(stu.start + "T12:00:00")) / 86400e3 + 1;
+  return Math.max(0, Math.min(t.weeks, Math.ceil(days / 7)));
 }
 const level = rate => { const t = S.settings.threshold / 100; return rate >= t ? "d" : rate >= t * 0.7 ? "w" : ""; };
 
@@ -84,9 +93,10 @@ function overview() {
     return `<div class="card">
       <div class="name">${esc(st.name)}</div>
       <div class="start">يُحسب الدوام من ${fmtDate(st.start)}</div>
-      <div class="row" style="align-items:baseline"><span class="big">${a.habs}</span><span class="muted">ساعة غياب من ${a.hreq}</span></div>
+      <div class="row" style="align-items:baseline"><span class="big">${a.habs}</span><span class="muted">ساعة غياب من ${a.htot} ساعة مقررة للفصل</span></div>
       <div class="bar" title="خط الإنذار ${T}%"><span class="${lv}" style="width:${Math.min(100, a.rate / (T / 100 * 1.5) * 100)}%"></span><b style="right:${100 / 1.5}%"></b></div>
-      <div class="kv"><span>عدد الغيابات</span><strong>${a.abs} من ${a.req} محاضرة</strong></div>
+      <div class="kv"><span>عدد الغيابات</span><strong>${a.abs} من ${a.req} محاضرة أُعطيت</strong></div>
+      <div class="kv"><span>يستطيع أن يغيب بعد</span><strong class="${a.left ? "" : "d"}">${a.left} ساعة</strong></div>
       <div class="kv"><span>نسبة الغياب الكلية</span><strong class="${lv}">${pct(a.rate)}</strong></div>
       ${worst && worst.abs ? `<div class="kv"><span>أعلى مادة</span><span class="${level(worst.rate)}">${esc(worst.name)} · ${pct(worst.rate)}</span></div>` : ""}
     </div>`;
@@ -95,13 +105,13 @@ function overview() {
   const rows = S.subjects.map(su => `<tr><td class="l"><strong>${esc(su.name)}</strong><br><small class="muted">${su.hours} س/محاضرة</small></td>${S.students.map(st => {
     if ((st.exempt || []).includes(su.id)) return `<td><span class="pill p-E">مستوفية</span></td>`;
     const b = stats(st.id, su.id); if (!b.req) return `<td class="muted">—</td>`;
-    return `<td><span class="cell ${level(b.rate)}"><strong>${b.abs} / ${b.req}</strong><small>${b.habs} من ${b.hreq} س · ${pct(b.rate)}</small></span></td>`;
+    return `<td><span class="cell ${level(b.rate)}"><strong>${b.abs} / ${b.req}</strong><small>${b.habs} من ${b.htot} س · ${pct(b.rate)}</small></span></td>`;
   }).join("")}</tr>`).join("");
-  const foot = S.students.map(st => { const a = stats(st.id); return `<td>${a.habs} / ${a.hreq} س</td>`; }).join("");
+  const foot = S.students.map(st => { const a = stats(st.id); return `<td>${a.habs} / ${a.htot} س</td>`; }).join("");
   return `<section><div class="row"><h2>الطلبة</h2><span class="spacer"></span><span class="muted small">خط الإنذار ${T}% من الساعات</span></div><div class="cards">${cards}</div></section>
   <section><div class="row"><h2>الغياب حسب المادة</h2><span class="spacer"></span><button class="btn small" id="xlsx" type="button">تنزيل Excel</button><button class="btn small" id="xlsxDrive" type="button">رفع نسخة إلى Drive</button></div>
   <div class="scroll"><table><thead><tr><th class="l">المادة</th>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="l">ساعات الغياب / المطالب بها</td>${foot}</tr></tfoot></table></div>
-  <p class="muted small" style="margin:8px 0 0">في كل خانة: الغيابات / المحاضرات المطالب بها، وتحتها ساعات الغياب والنسبة. البرتقالي عند 70% من خط الإنذار، والأحمر عند بلوغه.</p></section>`;
+  <p class="muted small" style="margin:8px 0 0">في كل خانة: الغيابات / المحاضرات التي أُعطيت، وتحتها ساعات الغياب من مجموع ساعات الفصل المقررة (${term().weeks} أسبوعاً حسب التقويم) والنسبة. البرتقالي عند 70% من خط الإنذار، والأحمر عند بلوغه.</p></section>`;
 }
 
 function logView() {
@@ -182,17 +192,21 @@ function aiView() {
 }
 
 function setupView() {
-  const subRows = S.subjects.map(s => `<tr data-sub="${s.id}"><td><input data-k="name" value="${esc(s.name)}" aria-label="اسم المادة"></td><td><input data-k="teacher" value="${esc(s.teacher)}" aria-label="الأستاذ"></td><td><input data-k="hours" type="number" min="0" step="0.5" value="${s.hours}" aria-label="الساعات"></td><td><button class="btn small danger" type="button" data-delsub="${s.id}">حذف</button></td></tr>`).join("");
+  const subRows = S.subjects.map(s => `<tr data-sub="${s.id}"><td><input data-k="name" value="${esc(s.name)}" aria-label="اسم المادة"></td><td><input data-k="teacher" value="${esc(s.teacher)}" aria-label="الأستاذ"></td><td><input data-k="hours" type="number" min="0" step="0.5" value="${s.hours}" aria-label="الساعات"></td><td><input data-k="perWeek" type="number" min="0" step="1" value="${s.perWeek || 1}" aria-label="محاضرات في الأسبوع"></td><td class="muted">${term().weeks * (s.perWeek || 1) * s.hours} س</td><td><button class="btn small danger" type="button" data-delsub="${s.id}">حذف</button></td></tr>`).join("");
   const stuRows = S.students.map(st => `<tr data-stu="${st.id}"><td><input data-k="name" value="${esc(st.name)}" aria-label="اسم الطالب"></td><td><input data-k="start" type="date" value="${st.start}" aria-label="تاريخ بدء الدوام"></td><td class="l"><div class="ex">${S.subjects.map(su => `<label><input type="checkbox" data-ex="${su.id}" ${(st.exempt || []).includes(su.id) ? "checked" : ""}>${esc(su.name)}</label>`).join("")}</div></td><td><button class="btn small danger" type="button" data-delstu="${st.id}">حذف</button></td></tr>`).join("");
   const p = C.provider, list = ui.modelLists[p] || [];
   const models = [...new Set([C.models[p], ...list].filter(Boolean))];
   return `<section class="setup panel"><div class="row"><h2 style="margin:0">المواد</h2><span class="spacer"></span><button class="btn small" id="addSub" type="button">+ مادة</button></div>
-   <div class="scroll"><table><thead><tr><th class="l">المادة</th><th class="l">الأستاذ</th><th>ساعات المحاضرة</th><th></th></tr></thead><tbody>${subRows}</tbody></table></div></section>
+   <div class="scroll"><table><thead><tr><th class="l">المادة</th><th class="l">الأستاذ</th><th>ساعات المحاضرة</th><th>محاضرات/أسبوع</th><th>ساعات الفصل</th><th></th></tr></thead><tbody>${subRows}</tbody></table></div></section>
    <section class="setup panel"><div class="row"><h2 style="margin:0">الطلبة</h2><span class="spacer"></span><button class="btn small" id="addStu" type="button">+ طالب</button></div>
    <div class="scroll"><table><thead><tr><th class="l">الاسم</th><th>يُحسب من</th><th class="l">مواد مستوفاة</th><th></th></tr></thead><tbody>${stuRows}</tbody></table></div></section>
    <section class="panel"><h2 style="margin:0">عام</h2><div class="grid2">
    <label class="field">خط الإنذار (% من الساعات)<input id="thr" type="number" min="1" max="100" value="${S.settings.threshold}"></label>
    <div class="field" style="grid-column:1/-1">أيام لا دوام فيها (الغياب فيها لا يُحسب، والحضور يُحسب)<div class="ex">${WEEKDAYS.map((d, i) => `<label><input type="checkbox" data-off="${i}" ${offDays().includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div></div>
+   <label class="field">بداية الفصل (حسب التقويم)<input id="tStart" type="date" value="${term().start}"></label>
+   <label class="field">نهاية الفصل<input id="tEnd" type="date" value="${term().end}"></label>
+   <label class="field">عدد أسابيع الفصل<input id="tWeeks" type="number" min="1" max="30" value="${term().weeks}"></label>
+   <p class="muted small" style="grid-column:1/-1;margin:0">نسبة الغياب = ساعات الغياب ÷ ساعات الفصل المقررة (الأسابيع × محاضرات الأسبوع × ساعات المحاضرة). الطالب الذي بدأ بعد بداية الفصل تُحسب له الأسابيع من تاريخ بدئه.</p>
    <label class="field">الفصل الدراسي<input id="term" value="${esc(S.settings.term)}"></label>
    <label class="field" style="grid-column:1/-1">البرنامج والقسم<input id="prog" value="${esc(S.settings.program)}"></label></div></section>
 
@@ -269,7 +283,7 @@ function bind(v) {
     }
   }
   if (v === "setup") {
-    document.querySelectorAll("tr[data-sub] input").forEach(i => i.onchange = () => { const s = subj(i.closest("tr").dataset.sub); s[i.dataset.k] = i.dataset.k === "hours" ? Math.max(0, +i.value || 0) : i.value.trim(); commit(); });
+    document.querySelectorAll("tr[data-sub] input").forEach(i => i.onchange = () => { const s = subj(i.closest("tr").dataset.sub); s[i.dataset.k] = ["hours", "perWeek"].includes(i.dataset.k) ? Math.max(0, +i.value || 0) : i.value.trim(); commit(); });
     document.querySelectorAll("tr[data-stu] input[data-k]").forEach(i => i.onchange = () => { const s = S.students.find(x => x.id === i.closest("tr").dataset.stu); s[i.dataset.k] = i.value.trim() || s[i.dataset.k]; commit(); });
     document.querySelectorAll("tr[data-stu] input[data-ex]").forEach(i => i.onchange = () => { const s = S.students.find(x => x.id === i.closest("tr").dataset.stu); s.exempt = (s.exempt || []).filter(x => x !== i.dataset.ex); if (i.checked) s.exempt.push(i.dataset.ex); commit(); });
     document.querySelectorAll("[data-delsub]").forEach(b => b.onclick = () => twoStep(b, () => { S.subjects = S.subjects.filter(s => s.id !== b.dataset.delsub); commit(); }));
@@ -277,6 +291,9 @@ function bind(v) {
     $("#addSub").onclick = () => { S.subjects.push({ id: "s" + uid(), name: "مادة جديدة", teacher: "", hours: 2 }); commit(); };
     $("#addStu").onclick = () => { S.students.push({ id: "t" + uid(), name: "طالب جديد", start: today(), exempt: [] }); commit(); };
     document.querySelectorAll("[data-off]").forEach(c => c.onchange = () => { S.settings.offDays = [...document.querySelectorAll("[data-off]:checked")].map(x => +x.dataset.off); commit("حُدّثت أيام الدوام"); });
+    $("#tStart").onchange = e => { S.settings.termStart = e.target.value; commit(); };
+    $("#tEnd").onchange = e => { S.settings.termEnd = e.target.value; commit(); };
+    $("#tWeeks").onchange = e => { S.settings.termWeeks = Math.max(1, +e.target.value || 15); commit(); };
     $("#thr").onchange = e => { S.settings.threshold = Math.min(100, Math.max(1, +e.target.value || 10)); commit(); };
     $("#term").onchange = e => { S.settings.term = e.target.value; commit(); };
     $("#prog").onchange = e => { S.settings.program = e.target.value; commit(); };
@@ -376,8 +393,8 @@ function dataForAI() {
     المواد: S.subjects.map(s => ({ المادة: s.name, المدرس: s.teacher, ساعات_المحاضرة: s.hours })),
     الطلبة: S.students.map(st => ({
       الاسم: st.name, يحسب_الدوام_من: st.start, مستوفي_لـ: (st.exempt || []).map(id => subj(id)?.name).filter(Boolean),
-      الإجمالي: (a => ({ محاضرات_مطالب_بها: a.req, غيابات: a.abs, ساعات_مطالب_بها: a.hreq, ساعات_غياب: a.habs, نسبة: pct(a.rate) }))(stats(st.id)),
-      حسب_المادة: S.subjects.filter(su => !(st.exempt || []).includes(su.id)).map(su => { const b = stats(st.id, su.id); return { المادة: su.name, محاضرات: b.req, غيابات: b.abs, ساعات_غياب: b.habs, من_ساعات: b.hreq, نسبة: pct(b.rate), تواريخ_الغياب: b.dates }; })
+      الإجمالي: (a => ({ محاضرات_مطالب_بها: a.req, غيابات: a.abs, ساعات_الفصل_المقررة: a.htot, ساعات_المحاضرات_المعطاة: a.hreq, ساعات_غياب: a.habs, نسبة: pct(a.rate) }))(stats(st.id)),
+      حسب_المادة: S.subjects.filter(su => !(st.exempt || []).includes(su.id)).map(su => { const b = stats(st.id, su.id); return { المادة: su.name, محاضرات: b.req, غيابات: b.abs, ساعات_غياب: b.habs, من_ساعات_الفصل: b.htot, نسبة: pct(b.rate), تواريخ_الغياب: b.dates }; })
     }))
   };
 }
@@ -406,7 +423,7 @@ ${S.settings.program || ""}
 
 م/ ${type}
 
-نظراً لتغيّبك عن ${su ? `مادة «${su.name}»` : "المحاضرات"} ${a.abs} ${a.abs === 1 ? "مرة" : "مرات"} بواقع ${a.habs} ساعة من أصل ${a.hreq} ساعة مقررة، أي بنسبة غياب قدرها ${pct(a.rate)}${a.dates.length ? `، وذلك في التواريخ: ${a.dates.map(fmtDate).join("، ")}` : ""}، وحيث إن تعليمات الدراسات العليا تحدد نسبة الغياب المسموح بها بـ ${S.settings.threshold}% من الساعات المقررة، لذا تقرر توجيه ${type} إليك، مع التأكيد على ضرورة الالتزام بالدوام، وبخلافه ستُتخذ الإجراءات القانونية وفق التعليمات النافذة.
+نظراً لتغيّبك عن ${su ? `مادة «${su.name}»` : "المحاضرات"} ${a.abs} ${a.abs === 1 ? "مرة" : "مرات"} بواقع ${a.habs} ساعة من أصل ${a.htot} ساعة مقررة، أي بنسبة غياب قدرها ${pct(a.rate)}${a.dates.length ? `، وذلك في التواريخ: ${a.dates.map(fmtDate).join("، ")}` : ""}، وحيث إن تعليمات الدراسات العليا تحدد نسبة الغياب المسموح بها بـ ${S.settings.threshold}% من الساعات المقررة، لذا تقرر توجيه ${type} إليك، مع التأكيد على ضرورة الالتزام بالدوام، وبخلافه ستُتخذ الإجراءات القانونية وفق التعليمات النافذة.
 
 مع التقدير.
 
@@ -424,7 +441,7 @@ async function letterAI() {
     ui.letter = (await AI.ask(C, {
       system: "أنت كاتب مراسلات رسمية في جامعة عراقية. اكتب الكتب الرسمية بالأسلوب الإداري العراقي المعتاد (الجهة، العدد، التاريخ، إلى، م/، المتن، التوقيع، نسخة منه إلى). نص عادي بدون Markdown.",
       text: `اكتب ${type} رسمياً للطالب «${st.name}» (${S.settings.program}، ${S.settings.term}) صادراً عن «${from}».
-الوقائع (لا تغيّرها): ${su ? `المادة: ${su.name}، المدرس: ${su.teacher}` : "كل المواد"}؛ عدد الغيابات ${a.abs} من ${a.req} محاضرة؛ ساعات الغياب ${a.habs} من ${a.hreq} ساعة؛ النسبة ${pct(a.rate)}؛ الحد المسموح ${S.settings.threshold}%؛ تواريخ الغياب: ${a.dates.map(fmtDate).join("، ") || "لا يوجد"}؛ تاريخ اليوم ${fmtDate(today())}.
+الوقائع (لا تغيّرها): ${su ? `المادة: ${su.name}، المدرس: ${su.teacher}` : "كل المواد"}؛ عدد الغيابات ${a.abs} من ${a.req} محاضرة؛ ساعات الغياب ${a.habs} من ${a.htot} ساعة؛ النسبة ${pct(a.rate)}؛ الحد المسموح ${S.settings.threshold}%؛ تواريخ الغياب: ${a.dates.map(fmtDate).join("، ") || "لا يوجد"}؛ تاريخ اليوم ${fmtDate(today())}.
 اترك خانة العدد فارغة.`
     })).trim();
   } catch (err) { toast("تعذّرت الصياغة: " + err.message); }
@@ -434,9 +451,9 @@ async function letterAI() {
 /* ===== Excel export ===== */
 function buildXlsx() {
   const wb = XLSX.utils.book_new();
-  const sum = [["المادة", ...S.students.flatMap(s => [s.name + " — غياب/مطالب", s.name + " — ساعات الغياب/المطالب"])]];
-  for (const su of S.subjects) sum.push([su.name, ...S.students.flatMap(st => { if ((st.exempt || []).includes(su.id)) return ["مستوفية", "مستوفية"]; const b = stats(st.id, su.id); return [`${b.abs} / ${b.req}`, `${b.habs} / ${b.hreq}`]; })]);
-  sum.push(["المجموع", ...S.students.flatMap(st => { const a = stats(st.id); return [`${a.abs} / ${a.req}`, `${a.habs} / ${a.hreq}`]; })]);
+  const sum = [["المادة", ...S.students.flatMap(s => [s.name + " — غياب/محاضرات أُعطيت", s.name + " — ساعات الغياب/ساعات الفصل"])]];
+  for (const su of S.subjects) sum.push([su.name, ...S.students.flatMap(st => { if ((st.exempt || []).includes(su.id)) return ["مستوفية", "مستوفية"]; const b = stats(st.id, su.id); return [`${b.abs} / ${b.req}`, `${b.habs} / ${b.htot}`]; })]);
+  sum.push(["المجموع", ...S.students.flatMap(st => { const a = stats(st.id); return [`${a.abs} / ${a.req}`, `${a.habs} / ${a.htot}`]; })]);
   const ws = XLSX.utils.aoa_to_sheet(sum); ws["!cols"] = [{ wch: 24 }, ...S.students.flatMap(() => [{ wch: 18 }, { wch: 22 }])]; ws["!views"] = [{ RTL: true }];
   XLSX.utils.book_append_sheet(wb, ws, "الملخص");
   const used = new Set(["الملخص"]);

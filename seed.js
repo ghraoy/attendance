@@ -1,1 +1,1 @@
-window.SEED={"students":[],"subjects":[],"sessions":[],"settings":{"threshold":10,"offDays":[3,4],"term":"الفصل الدراسي الاول 2026-2027","program":"ماجستير — قسم تقنيات صحة المجتمع"}};
+window.SEED={"students":[],"subjects":[],"sessions":[],"settings":{"threshold":10,"offDays":[3,4],"termStart":"2026-09-20","termEnd":"2026-12-31","termWeeks":15,"term":"الفصل الدراسي الاول 2026-2027","program":"ماجستير — قسم تقنيات صحة المجتمع"}};
