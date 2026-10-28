@@ -53,7 +53,7 @@ function stats(stuId, subId) {
   // planned semester hours (official calendar): weeks this student is required × lectures/week × hours
   let htot = 0;
   for (const su of (subId ? [subj(subId)] : S.subjects)) if (su && !(stu.exempt || []).includes(su.id)) htot += studentWeeks(stu) * (+su.perWeek || 1) * (+su.hours || 0);
-  return { req, abs, hreq, habs, htot, rate: htot ? habs / htot : 0, left: Math.max(0, Math.floor(htot * S.settings.threshold / 100 - habs)), dates: dates.sort() };
+  return { req, abs, hreq, habs, htot, rate: htot ? habs / htot : 0, left1: Math.max(0, Math.floor(htot * W().w1 / 100 - habs)), left2: Math.max(0, Math.floor(htot * W().w2 / 100 - habs)), dates: dates.sort() };
 }
 const term = () => ({ start: S.settings.termStart || "2026-09-20", end: S.settings.termEnd || "2026-12-31", weeks: +S.settings.termWeeks || 15 });
 function studentWeeks(stu) {
@@ -61,7 +61,9 @@ function studentWeeks(stu) {
   const days = (new Date(t.end + "T12:00:00") - new Date(stu.start + "T12:00:00")) / 86400e3 + 1;
   return Math.max(0, Math.min(t.weeks, Math.ceil(days / 7)));
 }
-const level = rate => { const t = S.settings.threshold / 100; return rate >= t ? "d" : rate >= t * 0.7 ? "w" : ""; };
+const W = () => ({ w1: +S.settings.warn1 || 5, w2: +S.settings.warn2 || 7 }); // الإنذار الأولي / الإنذار الثاني (% من ساعات الفصل)
+const level = rate => { const { w1, w2 } = W(); return rate * 100 >= w2 ? "d" : rate * 100 >= w1 ? "w" : ""; };
+const levelText = rate => ({ d: "تجاوز الإنذار الثاني", w: "تجاوز الإنذار الأولي" }[level(rate)] || "");
 
 /* ===== helpers ===== */
 function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => el.hidden = true, 2600); }
@@ -85,7 +87,7 @@ function render() {
 }
 
 function overview() {
-  const T = S.settings.threshold;
+  const { w1, w2 } = W(), scale = w2 * 1.5;
   if (!S.students.length || !S.subjects.length) return `<div class="panel" style="text-align:center;justify-items:center;padding:32px"><h2 style="margin:0">ابدأ بملف Excel</h2><p class="muted" style="margin:0;max-width:52ch">السجل فارغ على هذا الجهاز. استورد ملف الحضور الذي عندك (ورقة لكل مادة، أو جدول بأعمدة التاريخ والمادة والطالب والحالة) فتُنشأ المواد والطلبة والمحاضرات تلقائياً. أو أضفها يدوياً من «الإعدادات».</p><div class="row" style="justify-content:center"><a class="btn primary" href="#import">استيراد ملف Excel</a><a class="btn" href="#setup">إضافة يدوية</a></div><p class="muted small" style="margin:0">إذا ربطت Google Drive على جهاز آخر، اضغط «اتصال» في الإعدادات فيُسحب السجل.</p></div>`;
   const cards = S.students.map(st => {
     const a = stats(st.id), lv = level(a.rate);
@@ -94,9 +96,10 @@ function overview() {
       <div class="name">${esc(st.name)}</div>
       <div class="start">يُحسب الدوام من ${fmtDate(st.start)}</div>
       <div class="row" style="align-items:baseline"><span class="big">${a.habs}</span><span class="muted">ساعة غياب من ${a.htot} ساعة مقررة للفصل</span></div>
-      <div class="bar" title="خط الإنذار ${T}%"><span class="${lv}" style="width:${Math.min(100, a.rate / (T / 100 * 1.5) * 100)}%"></span><b style="right:${100 / 1.5}%"></b></div>
+      <div class="bar" title="الإنذار الأولي ${w1}% · الثاني ${w2}%"><span class="${lv}" style="width:${Math.min(100, a.rate * 100 / scale * 100)}%"></span><b style="right:${w1 / scale * 100}%"></b><b style="right:${w2 / scale * 100}%"></b></div>
       <div class="kv"><span>عدد الغيابات</span><strong>${a.abs} من ${a.req} محاضرة أُعطيت</strong></div>
-      <div class="kv"><span>يستطيع أن يغيب بعد</span><strong class="${a.left ? "" : "d"}">${a.left} ساعة</strong></div>
+      <div class="kv"><span>باقي حتى الإنذار الأولي (${w1}%)</span><strong class="${a.left1 ? "" : "w"}">${a.left1 ? a.left1 + " ساعة" : "تجاوزه"}</strong></div>
+      <div class="kv"><span>باقي حتى الإنذار الثاني (${w2}%)</span><strong class="${a.left2 ? "" : "d"}">${a.left2 ? a.left2 + " ساعة" : "تجاوزه"}</strong></div>
       <div class="kv"><span>نسبة الغياب الكلية</span><strong class="${lv}">${pct(a.rate)}</strong></div>
       ${worst && worst.abs ? `<div class="kv"><span>أعلى مادة</span><span class="${level(worst.rate)}">${esc(worst.name)} · ${pct(worst.rate)}</span></div>` : ""}
     </div>`;
@@ -108,10 +111,10 @@ function overview() {
     return `<td><span class="cell ${level(b.rate)}"><strong>${b.abs} / ${b.req}</strong><small>${b.habs} من ${b.htot} س · ${pct(b.rate)}</small></span></td>`;
   }).join("")}</tr>`).join("");
   const foot = S.students.map(st => { const a = stats(st.id); return `<td>${a.habs} / ${a.htot} س</td>`; }).join("");
-  return `<section><div class="row"><h2>الطلبة</h2><span class="spacer"></span><span class="muted small">خط الإنذار ${T}% من الساعات</span></div><div class="cards">${cards}</div></section>
+  return `<section><div class="row"><h2>الطلبة</h2><span class="spacer"></span><span class="muted small">الإنذار الأولي ${w1}% · الثاني ${w2}% من ساعات الفصل</span></div><div class="cards">${cards}</div></section>
   <section><div class="row"><h2>الغياب حسب المادة</h2><span class="spacer"></span><button class="btn small" id="xlsx" type="button">تنزيل Excel</button><button class="btn small" id="xlsxDrive" type="button">رفع نسخة إلى Drive</button></div>
   <div class="scroll"><table><thead><tr><th class="l">المادة</th>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="l">ساعات الغياب / المطالب بها</td>${foot}</tr></tfoot></table></div>
-  <p class="muted small" style="margin:8px 0 0">في كل خانة: الغيابات / المحاضرات التي أُعطيت، وتحتها ساعات الغياب من مجموع ساعات الفصل المقررة (${term().weeks} أسبوعاً حسب التقويم) والنسبة. البرتقالي عند 70% من خط الإنذار، والأحمر عند بلوغه.</p></section>`;
+  <p class="muted small" style="margin:8px 0 0">في كل خانة: الغيابات / المحاضرات التي أُعطيت، وتحتها ساعات الغياب من مجموع ساعات الفصل المقررة (${term().weeks} أسبوعاً حسب التقويم) والنسبة. البرتقالي = تجاوز الإنذار الأولي، والأحمر = تجاوز الإنذار الثاني.</p></section>`;
 }
 
 function logView() {
@@ -201,7 +204,8 @@ function setupView() {
    <section class="setup panel"><div class="row"><h2 style="margin:0">الطلبة</h2><span class="spacer"></span><button class="btn small" id="addStu" type="button">+ طالب</button></div>
    <div class="scroll"><table><thead><tr><th class="l">الاسم</th><th>يُحسب من</th><th class="l">مواد مستوفاة</th><th></th></tr></thead><tbody>${stuRows}</tbody></table></div></section>
    <section class="panel"><h2 style="margin:0">عام</h2><div class="grid2">
-   <label class="field">خط الإنذار (% من الساعات)<input id="thr" type="number" min="1" max="100" value="${S.settings.threshold}"></label>
+   <label class="field">الإنذار الأولي (% من ساعات الفصل)<input id="w1" type="number" min="0" max="100" step="0.5" value="${W().w1}"></label>
+   <label class="field">الإنذار الثاني (% من ساعات الفصل)<input id="w2" type="number" min="0" max="100" step="0.5" value="${W().w2}"></label>
    <div class="field" style="grid-column:1/-1">أيام لا دوام فيها (الغياب فيها لا يُحسب، والحضور يُحسب)<div class="ex">${WEEKDAYS.map((d, i) => `<label><input type="checkbox" data-off="${i}" ${offDays().includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div></div>
    <label class="field">بداية الفصل (حسب التقويم)<input id="tStart" type="date" value="${term().start}"></label>
    <label class="field">نهاية الفصل<input id="tEnd" type="date" value="${term().end}"></label>
@@ -238,8 +242,11 @@ function setupView() {
      <li>كرّر الضغط على «اتصال» على الموبايل بنفس الحساب، فيسحب السجل نفسه.</li>
    </ol></details></section>
 
+   <section class="panel"><h2 style="margin:0">التحديثات</h2>
+   <p class="muted small" style="margin:0">التطبيق يتحدّث تلقائياً عند فتحه إذا وُجدت نسخة جديدة، ولا تفقد بياناتك. الإصدار الحالي: <b>${APP_VERSION}</b></p>
+   <div class="row"><button class="btn" id="updBtn" type="button">البحث عن تحديث الآن</button></div></section>
    <section class="panel"><h2 style="margin:0">إعادة الضبط</h2>
-   <div class="row"><button class="btn danger" id="wipeBtn" type="button">بدء سجل فارغ</button></div>
+   <div class="row"><button class="btn danger" id="wipeBtn" type="button">مسح كل البيانات والبدء من جديد</button></div>
    <p class="muted small" style="margin:0">احفظ نسخة احتياطية قبل أي منهما.</p></section>`;
 }
 
@@ -294,7 +301,8 @@ function bind(v) {
     $("#tStart").onchange = e => { S.settings.termStart = e.target.value; commit(); };
     $("#tEnd").onchange = e => { S.settings.termEnd = e.target.value; commit(); };
     $("#tWeeks").onchange = e => { S.settings.termWeeks = Math.max(1, +e.target.value || 15); commit(); };
-    $("#thr").onchange = e => { S.settings.threshold = Math.min(100, Math.max(1, +e.target.value || 10)); commit(); };
+    $("#w1").onchange = e => { S.settings.warn1 = Math.min(100, Math.max(0, +e.target.value || 5)); commit(); };
+    $("#w2").onchange = e => { S.settings.warn2 = Math.min(100, Math.max(0, +e.target.value || 7)); commit(); };
     $("#term").onchange = e => { S.settings.term = e.target.value; commit(); };
     $("#prog").onchange = e => { S.settings.program = e.target.value; commit(); };
     $("#prov").onchange = e => { C.provider = e.target.value; saveCfg(); render(); };
@@ -312,6 +320,7 @@ function bind(v) {
     $("#cid").onchange = e => { C.drive.clientId = e.target.value.trim(); saveCfg(); };
     $("#driveGo").onclick = () => { C.drive.clientId = $("#cid").value.trim(); saveCfg(); syncNow(true); };
     if ($("#driveOut")) $("#driveOut").onclick = () => { Drive.signOut(); render(); toast("قُطع الاتصال بـ Drive"); };
+    $("#updBtn").onclick = async () => { toast("جارٍ البحث عن تحديث…"); try { await window._swReg?.update(); } catch (e) {} setTimeout(() => location.reload(), 1500); };
     $("#wipeBtn").onclick = e => twoStep(e.target, () => { S = { students: [], subjects: [], sessions: [], settings: { ...S.settings } }; commit("بدأ سجل فارغ"); }, "المسح");
   }
 }
@@ -389,7 +398,7 @@ async function readPhoto(file) {
 
 function dataForAI() {
   return {
-    الإعدادات: { خط_الإنذار_نسبة_من_الساعات: S.settings.threshold + "%", الفصل: S.settings.term, اليوم: today() },
+    الإعدادات: { الإنذار_الأولي: W().w1 + "% من ساعات الفصل", الإنذار_الثاني: W().w2 + "% من ساعات الفصل", الفصل: S.settings.term, اليوم: today() },
     المواد: S.subjects.map(s => ({ المادة: s.name, المدرس: s.teacher, ساعات_المحاضرة: s.hours })),
     الطلبة: S.students.map(st => ({
       الاسم: st.name, يحسب_الدوام_من: st.start, مستوفي_لـ: (st.exempt || []).map(id => subj(id)?.name).filter(Boolean),
@@ -423,7 +432,7 @@ ${S.settings.program || ""}
 
 م/ ${type}
 
-نظراً لتغيّبك عن ${su ? `مادة «${su.name}»` : "المحاضرات"} ${a.abs} ${a.abs === 1 ? "مرة" : "مرات"} بواقع ${a.habs} ساعة من أصل ${a.htot} ساعة مقررة، أي بنسبة غياب قدرها ${pct(a.rate)}${a.dates.length ? `، وذلك في التواريخ: ${a.dates.map(fmtDate).join("، ")}` : ""}، وحيث إن تعليمات الدراسات العليا تحدد نسبة الغياب المسموح بها بـ ${S.settings.threshold}% من الساعات المقررة، لذا تقرر توجيه ${type} إليك، مع التأكيد على ضرورة الالتزام بالدوام، وبخلافه ستُتخذ الإجراءات القانونية وفق التعليمات النافذة.
+نظراً لتغيّبك عن ${su ? `مادة «${su.name}»` : "المحاضرات"} ${a.abs} ${a.abs === 1 ? "مرة" : "مرات"} بواقع ${a.habs} ساعة من أصل ${a.htot} ساعة مقررة، أي بنسبة غياب قدرها ${pct(a.rate)}${a.dates.length ? `، وذلك في التواريخ: ${a.dates.map(fmtDate).join("، ")}` : ""}، وحيث إن تعليمات الدراسات العليا تحدد توجيه الإنذار الأولي عند تجاوز ${W().w1}% والإنذار الثاني عند تجاوز ${W().w2}% من الساعات المقررة، لذا تقرر توجيه ${type} إليك، مع التأكيد على ضرورة الالتزام بالدوام، وبخلافه ستُتخذ الإجراءات القانونية وفق التعليمات النافذة.
 
 مع التقدير.
 
@@ -441,7 +450,7 @@ async function letterAI() {
     ui.letter = (await AI.ask(C, {
       system: "أنت كاتب مراسلات رسمية في جامعة عراقية. اكتب الكتب الرسمية بالأسلوب الإداري العراقي المعتاد (الجهة، العدد، التاريخ، إلى، م/، المتن، التوقيع، نسخة منه إلى). نص عادي بدون Markdown.",
       text: `اكتب ${type} رسمياً للطالب «${st.name}» (${S.settings.program}، ${S.settings.term}) صادراً عن «${from}».
-الوقائع (لا تغيّرها): ${su ? `المادة: ${su.name}، المدرس: ${su.teacher}` : "كل المواد"}؛ عدد الغيابات ${a.abs} من ${a.req} محاضرة؛ ساعات الغياب ${a.habs} من ${a.htot} ساعة؛ النسبة ${pct(a.rate)}؛ الحد المسموح ${S.settings.threshold}%؛ تواريخ الغياب: ${a.dates.map(fmtDate).join("، ") || "لا يوجد"}؛ تاريخ اليوم ${fmtDate(today())}.
+الوقائع (لا تغيّرها): ${su ? `المادة: ${su.name}، المدرس: ${su.teacher}` : "كل المواد"}؛ عدد الغيابات ${a.abs} من ${a.req} محاضرة؛ ساعات الغياب ${a.habs} من ${a.htot} ساعة؛ النسبة ${pct(a.rate)}؛ حد الإنذار الأولي ${W().w1}% وحد الإنذار الثاني ${W().w2}% من ساعات الفصل؛ تواريخ الغياب: ${a.dates.map(fmtDate).join("، ") || "لا يوجد"}؛ تاريخ اليوم ${fmtDate(today())}.
 اترك خانة العدد فارغة.`
     })).trim();
   } catch (err) { toast("تعذّرت الصياغة: " + err.message); }
@@ -506,7 +515,14 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+const APP_VERSION = "v6";
+// Updates install themselves: a new service worker takes over and the page reloads once.
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register("sw.js").then(r => { window._swReg = r; setInterval(() => r.update().catch(() => {}), 30 * 60e3); }).catch(() => {});
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") window._swReg?.update().catch(() => {}); });
+}
 window.addEventListener("hashchange", render);
 store(KEY, S);
 render();
