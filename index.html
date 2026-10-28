@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>سجل حضور الماجستير</title>
+<meta name="theme-color" content="#0e6a66">
+<meta name="description" content="سجل حضور وغياب طلبة الماجستير: الغيابات والساعات لكل مادة، الاستيراد من Excel، قراءة صور أوراق الحضور، والمزامنة مع Google Drive.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@600;800&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>سجل حضور الماجستير</h1>
+        <div class="sub" id="termLine">قسم تقنيات صحة المجتمع</div>
+      </div>
+      <div class="row">
+        <button class="save off" id="syncBtn" type="button" title="مزامنة Google Drive" style="border:0;background:none;cursor:pointer"><i></i><span>محفوظ على هذا الجهاز</span></button>
+        <button class="btn" id="installBtn" type="button" hidden>تثبيت التطبيق</button>
+        <button class="btn primary" id="addBtn" type="button">+ محاضرة</button>
+      </div>
+    </div>
+    <nav aria-label="الأقسام">
+      <a href="#overview">الملخص</a>
+      <a href="#log">الأرشيف</a>
+      <a href="#import">إدخال البيانات</a>
+      <a href="#ai">المساعد</a>
+      <a href="#setup">الإعدادات</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap" id="main">
+  <div class="empty">جارٍ فتح السجل…</div>
+</main>
+
+<dialog id="dlg"><form class="dlg" id="sessForm" method="dialog"></form></dialog>
+<div class="toast" id="toast" hidden></div>
+<div id="printArea"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="seed.js"></script>
+<script src="ai.js"></script>
+<script src="drive.js"></script>
+<script src="importer.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
