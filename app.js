@@ -28,6 +28,7 @@ const ui = { subject: "", student: "", onlyAbs: false, preview: null, answer: ""
 function saveCfg() { store(CFG, C); }
 function commit(msg) {
   DB.updatedAt = new Date().toISOString();
+  if (R()) R().updatedAt = DB.updatedAt;
   if (C.drive.clientId && !C.pendingSync) { C.pendingSync = true; saveCfg(); } // queued for upload until a sync succeeds
   if (!store(KEY, DB)) toast("تعذّر الحفظ على هذا الجهاز — مساحة المتصفح ممتلئة أو محجوبة");
   render(); if (msg) toast(msg);
@@ -73,8 +74,9 @@ function welcome() {
   return `<div class="panel" style="text-align:center;justify-items:center;padding:36px 20px">
     <h2 style="margin:0;font-size:1.3rem">سجل الحضور والغياب الجامعي</h2>
     <p class="muted" style="margin:0;max-width:56ch">لأي قسم ولأي مرحلة: دراسات أولية (صباحي أو مسائي) أو دراسات عليا. تُعرّف المواد وجدولها الأسبوعي والتقويم وقواعد الإنذار، ثم تسجّل الحضور فيحسب البرنامج الساعات والنسب والإنذارات.</p>
-    <div class="row" style="justify-content:center"><a class="btn primary" href="#new">إنشاء سجل جديد خطوة بخطوة</a><a class="btn" href="#import">استيراد نموذج Excel معبّأ</a></div>
-    <p class="muted small" style="margin:0">إذا كان لديك سجل على جهاز آخر مربوط بـ Google Drive، اضغط زر المزامنة في الأعلى.</p></div>`;
+    ${C.drive.clientId && !C.account ? `<button class="btn primary" id="signInBig" type="button" style="font-size:1.05rem;padding:10px 22px">تسجيل الدخول بحساب Google</button>
+    <p class="muted small" style="margin:0;max-width:52ch">إذا كان لديك حساب سابق تُسترجع كل سجلاتك وإعداداتك تلقائياً. البيانات تُحفظ في Google Drive الخاص بك فقط.</p>` : ""}
+    <div class="row" style="justify-content:center"><a class="btn ${C.account ? "primary" : ""}" href="#new">إنشاء سجل جديد خطوة بخطوة</a><a class="btn" href="#import">استيراد نموذج Excel معبّأ</a></div></div>`;
 }
 
 /* ===== overview ===== */
@@ -349,11 +351,13 @@ function setupView() {
      <li>Gemini (مجاني): <code>aistudio.google.com/apikey</code> ← Create API key.</li>
      <li>ChatGPT: <code>platform.openai.com/api-keys</code> (مدفوع حسب الاستخدام).</li>
      <li>Claude: <code>console.anthropic.com/settings/keys</code> (مدفوع حسب الاستخدام).</li></ol></details></section>
-   <section class="panel"><h2 style="margin:0">Google Drive</h2>
-   <div class="${Drive.connected() ? "banner ok" : "banner"}">${Drive.connected() ? "متصل. تُرفع كل السجلات تلقائياً بعد كل تعديل إلى مجلد «" + Drive.FOLDER + "»." : "غير متصل. اضغط «اتصال» واختر حسابك."}${C.lastSync ? "<br>آخر مزامنة: " + new Date(C.lastSync).toLocaleString("ar-IQ") : ""}${C.pendingSync ? "<br><b>توجد تغييرات بانتظار الرفع.</b>" : ""}</div>
-   <p class="muted small" style="margin:0">التطبيق يعمل بالكامل بدون إنترنت: التسجيل والحساب والتصدير. أي تغيير يُحفظ على الجهاز فوراً، ويُرفع إلى Drive تلقائياً عند عودة الاتصال. إذا انتهت جلسة Google (بعد ساعة تقريباً) يظهر في الأعلى «اضغط للرفع».</p>
-   <label class="field">Google OAuth Client ID<input id="cid" value="${esc(C.drive.clientId || "")}" style="direction:ltr"></label>
-   <div class="row"><button class="btn primary" id="driveGo" type="button">${Drive.connected() ? "مزامنة الآن" : "اتصال"}</button>${Drive.connected() ? `<button class="btn" id="driveOut" type="button">قطع الاتصال</button>` : ""}</div></section>
+   <section class="panel"><h2 style="margin:0">الحساب (Google)</h2>
+   ${C.account ? `<div class="${Drive.connected() ? "banner ok" : "banner"}"><b>${esc(C.account.name || "")}</b> ${esc(C.account.email)}<br>${Drive.connected() ? "متصل. كل السجلات والإعدادات تُحفظ في حسابك وتُسترجع على أي جهاز تسجّل الدخول منه." : "الجلسة منتهية — اضغط «مزامنة» لتجديدها."}${C.lastSync ? "<br>آخر مزامنة: " + new Date(C.lastSync).toLocaleString("ar-IQ") : ""}${C.pendingSync ? "<br><b>توجد تغييرات بانتظار الرفع.</b>" : ""}</div>`
+     : `<div class="banner">غير مسجّل. سجّل الدخول بحساب Google لتُحفظ سجلاتك وإعداداتك في Drive الخاص بك وتُسترجع على أي جهاز.</div>`}
+   <div class="row">${C.account ? `<button class="btn primary" id="driveGo" type="button">مزامنة الآن</button><button class="btn" id="driveOut" type="button">تسجيل الخروج</button><button class="btn danger" id="driveWipe" type="button">تسجيل الخروج ومسح هذا الجهاز</button>` : `<button class="btn primary" id="driveGo" type="button">تسجيل الدخول بحساب Google</button>`}</div>
+   <label class="check"><input type="checkbox" id="syncKeys" ${C.syncKeys === false ? "" : "checked"}> حفظ مفاتيح الذكاء الاصطناعي مع حسابي (في Drive الخاص بك فقط)</label>
+   <p class="muted small" style="margin:0">التطبيق يعمل بالكامل بدون إنترنت، وأي تغيير يُرفع تلقائياً عند الاتصال. «تسجيل الخروج ومسح هذا الجهاز» للأجهزة المشتركة: بياناتك تبقى محفوظة في حسابك.</p>
+   <details class="small"><summary>إعدادات متقدمة</summary><label class="field" style="margin-top:8px">Google OAuth Client ID<input id="cid" value="${esc(C.drive.clientId || "")}" style="direction:ltr"></label></details></section>
    <section class="panel"><h2 style="margin:0">التحديثات</h2>
    <p class="muted small" style="margin:0">التطبيق يتحدّث تلقائياً عند فتحه، ولا تفقد بياناتك. الإصدار الحالي: <b>${APP_VERSION}</b></p>
    <div class="row"><button class="btn" id="updBtn" type="button">البحث عن تحديث الآن</button></div></section>
@@ -392,6 +396,7 @@ function wizardView() {
 
 /* ===== bindings ===== */
 function bind(v) {
+  if ($("#signInBig")) $("#signInBig").onclick = () => syncNow(true);
   if (v === "overview" && $("#xlsx")) { $("#xlsx").onclick = () => saveFile(`${Core.registerName(R())} ${today()}.xlsx`, Template.build(R()), XLSX_TYPE); $("#xlsxDrive").onclick = sheetToDrive; }
   if (v === "today") {
     $("#dayPick").onchange = e => { ui.day = e.target.value || today(); render(); };
@@ -457,21 +462,23 @@ function bindAI() {
 function bindSetup() {
   if (R()) {
     bindForms(R(), rerender => commit());
-    $("#delReg").onclick = e => twoStep(e.target, () => { DB.registers = DB.registers.filter(r => r.id !== DB.current); DB.current = DB.registers[0]?.id || null; commit("حُذف السجل"); }, "الحذف");
-    $("#wipeBtn").onclick = e => twoStep(e.target, () => { DB = Core.emptyDB(); commit("مُسحت كل السجلات"); }, "المسح");
+    $("#delReg").onclick = e => twoStep(e.target, () => { (DB.deleted ||= []).push({ id: DB.current, at: new Date().toISOString() }); DB.registers = DB.registers.filter(r => r.id !== DB.current); DB.current = DB.registers[0]?.id || null; commit("حُذف السجل"); }, "الحذف");
+    $("#wipeBtn").onclick = e => twoStep(e.target, () => { const at = new Date().toISOString(); const deleted = [...(DB.deleted || []), ...DB.registers.map(r => ({ id: r.id, at }))]; DB = { ...Core.emptyDB(), deleted }; commit("مُسحت كل السجلات"); }, "المسح");
   }
-  $("#prov").onchange = e => { C.provider = e.target.value; saveCfg(); render(); };
-  $("#model").onchange = e => { C.models[C.provider] = e.target.value; saveCfg(); toast("اختير النموذج"); };
-  $("#key").onchange = e => { C.keys[C.provider] = e.target.value.trim(); saveCfg(); };
+  $("#prov").onchange = e => { C.provider = e.target.value; prefsChanged(); render(); };
+  $("#model").onchange = e => { C.models[C.provider] = e.target.value; prefsChanged(); toast("اختير النموذج"); };
+  $("#key").onchange = e => { C.keys[C.provider] = e.target.value.trim(); prefsChanged(); };
   $("#fetchModels").onclick = async () => {
     C.keys[C.provider] = $("#key").value.trim(); saveCfg();
     const msg = $("#aiMsg"); msg.textContent = "جارٍ الاتصال…"; msg.className = "muted small";
-    try { const list = await AI.listModels(C.provider, C.keys[C.provider]); ui.modelLists[C.provider] = list; if (!C.models[C.provider] || !list.includes(C.models[C.provider])) C.models[C.provider] = AI.suggest(C.provider, list); saveCfg(); render(); toast(`المفتاح يعمل — ${list.length} نموذج متاح`); }
+    try { const list = await AI.listModels(C.provider, C.keys[C.provider]); ui.modelLists[C.provider] = list; if (!C.models[C.provider] || !list.includes(C.models[C.provider])) C.models[C.provider] = AI.suggest(C.provider, list); prefsChanged(); render(); toast(`المفتاح يعمل — ${list.length} نموذج متاح`); }
     catch (err) { msg.textContent = err.message; msg.className = "small d"; }
   };
   $("#cid").onchange = e => { C.drive.clientId = e.target.value.trim(); saveCfg(); };
-  $("#driveGo").onclick = () => { C.drive.clientId = $("#cid").value.trim(); saveCfg(); syncNow(true); };
-  if ($("#driveOut")) $("#driveOut").onclick = () => { Drive.signOut(); render(); toast("قُطع الاتصال بـ Drive"); };
+  $("#driveGo").onclick = () => { C.drive.clientId = $("#cid").value.trim() || C.drive.clientId; saveCfg(); syncNow(true); };
+  if ($("#driveOut")) $("#driveOut").onclick = () => signOut(false);
+  if ($("#driveWipe")) $("#driveWipe").onclick = e => twoStep(e.target, () => signOut(true), "الخروج والمسح");
+  $("#syncKeys").onchange = e => { C.syncKeys = e.target.checked; prefsChanged(); };
   $("#updBtn").onclick = async () => { toast("جارٍ البحث عن تحديث…"); try { await window._swReg?.update(); } catch (e) {} setTimeout(() => location.reload(), 1500); };
 }
 function bindWizard() {
@@ -621,7 +628,7 @@ function syncBadge(state, text) {
   if (!state && !text) {
     if (!online) { state = "off"; text = C.pendingSync ? "بدون إنترنت — التغييرات محفوظة وستُرفع عند الاتصال" : "بدون إنترنت — يعمل من الجهاز"; }
     else if (C.pendingSync && C.drive.clientId) { state = "busy"; text = on ? "تغييرات بانتظار الرفع…" : "تغييرات بانتظار الرفع — اضغط للرفع"; }
-    else { state = on ? "" : "off"; text = on ? "متزامن مع Drive" : (C.drive.clientId ? "اضغط للمزامنة مع Drive" : "محفوظ على هذا الجهاز"); }
+    else { state = on ? "" : "off"; text = on ? "متزامن · " + (C.account?.email || "Drive") : C.account ? "اضغط للمزامنة · " + C.account.email : (C.drive.clientId ? "تسجيل الدخول بحساب Google" : "محفوظ على هذا الجهاز"); }
   }
   b.className = "save " + state; b.querySelector("span").textContent = text;
   b.title = text;
@@ -642,24 +649,52 @@ window.addEventListener("offline", () => { syncBadge(); toast("انقطع الإ
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") flushQueue(); });
 setInterval(() => { if (C.pendingSync && Drive.connected() && navigator.onLine !== false && !syncing) syncNow(false); }, 60e3);
 // the Google session lasts about an hour; when it has expired, the next tap on the badge renews it and uploads the queue
+function prefsChanged() { C.prefsAt = new Date().toISOString(); saveCfg(); if (C.account) { C.pendingSync = true; saveCfg(); scheduleSync(); } }
+function payload() {
+  const prefs = { provider: C.provider, models: C.models, ...(C.syncKeys === false ? {} : { keys: C.keys }) };
+  return { ...DB, prefs, prefsAt: C.prefsAt || "" };
+}
+function applyPrefs(remote) {
+  if (!remote?.prefs || (remote.prefsAt || "") <= (C.prefsAt || "")) return;
+  const p = remote.prefs; if (p.provider) C.provider = p.provider; if (p.models) C.models = { ...C.models, ...p.models };
+  if (p.keys && C.syncKeys !== false) C.keys = { ...C.keys, ...p.keys };
+  C.prefsAt = remote.prefsAt; saveCfg();
+}
 async function syncNow(interactive) {
   if (syncing) return; syncing = true; syncBadge("busy", "جارٍ المزامنة…");
   try {
-    await Drive.signIn(C.drive.clientId, interactive);
-    const remote = Core.migrate(await Drive.pull(C.drive));
-    const localChanged = !C.lastSync || (DB.updatedAt || "") > C.lastSync;
-    const remoteNewer = remote && (remote.updatedAt || "") > (DB.updatedAt || "");
-    if (remote && remoteNewer && !localChanged) { DB = remote; store(KEY, DB); toast("سُحب أحدث نسخة من Drive"); }
-    else if (remote && remoteNewer && localChanged) {
-      if (interactive) { await Drive.push(C.drive, DB); toast("رُفعت نسختك. النسخة السابقة محفوظة في سجل إصدارات الملف على Drive"); }
-      else { DB = remote; store(KEY, DB); toast("سُحبت نسخة أحدث من جهاز آخر"); }
-    } else if (!remote || (DB.updatedAt || "") !== (remote.updatedAt || "")) await Drive.push(C.drive, DB);
+    await Drive.signIn(C.drive.clientId, interactive, C.account?.email);
+    const me = await Drive.about();
+    if (C.account && me.email && C.account.email !== me.email) {
+      // another Google account: keep a local backup of the previous account's copy, then open the new account
+      store("mtu-backup-" + C.account.email, DB); DB = Core.emptyDB(); C.drive.fileId = null; C.drive.folderId = null; C.lastSync = null; C.pendingSync = false;
+      C.keys = {}; C.models = {}; C.prefsAt = "";
+      toast("بُدّل الحساب إلى " + me.email);
+    }
+    const firstTime = !C.account || C.account.email !== me.email;
+    C.account = me;
+    const raw = await Drive.pull(C.drive);
+    // an old single-register file (v1) is the same data this device already migrated: do not import it twice
+    const remote = raw && raw.version !== 2 && DB.registers.length ? null : Core.migrate(raw);
+    const hadLocal = DB.registers.length;
+    const merged = Core.mergeDB(DB, remote);
+    applyPrefs(remote);
+    DB = merged; store(KEY, DB);
+    if (!remote || !Core.sameData(merged, remote) || C.pendingSync) await Drive.push(C.drive, payload());
     C.lastSync = new Date().toISOString(); C.pendingSync = false; saveCfg(); render();
+    if (firstTime) toast(remote && remote.registers?.length ? `مرحباً ${me.name || me.email} — استُرجعت بياناتك من حسابك (عدد السجلات: ${remote.registers.length})${hadLocal ? " ودُمجت مع ما على هذا الجهاز" : ""}` : `مرحباً ${me.name || me.email} — أصبحت بياناتك محفوظة في حسابك`);
   } catch (err) {
     if (navigator.onLine === false) syncBadge(); else syncBadge("err", C.pendingSync ? "تعذّر الرفع — التغييرات محفوظة، اضغط للمحاولة" : "تعذّرت المزامنة");
     if (interactive) toast(navigator.onLine === false ? "لا يوجد إنترنت الآن — التغييرات محفوظة على الجهاز" : err.message);
   }
   syncing = false;
+}
+function signOut(wipe) {
+  Drive.signOut(); const who = C.account?.email;
+  C.account = null; C.lastSync = null; C.pendingSync = false; C.drive.fileId = null; C.drive.folderId = null;
+  if (wipe) { DB = Core.emptyDB(); C.keys = {}; store(KEY, DB); }
+  saveCfg(); location.hash = wipe ? "" : "setup"; render();
+  toast(wipe ? "سُجّل الخروج ومُسحت بيانات هذا الجهاز — بياناتك محفوظة في حساب " + (who || "Google") : "سُجّل الخروج");
 }
 $("#syncBtn").onclick = () => {
   if (!C.drive.clientId) { location.hash = "setup"; toast("أضف Client ID أولاً"); return; }
@@ -679,7 +714,7 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-const APP_VERSION = "v10";
+const APP_VERSION = "v11";
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });

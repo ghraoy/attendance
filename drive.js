@@ -15,7 +15,7 @@ window.Drive = (() => {
     });
   }
 
-  async function signIn(clientId, interactive = true) {
+  async function signIn(clientId, interactive = true, hint = "") {
     if (token && Date.now() < expires - 60000) return token;
     if (!clientId) throw new Error("أدخل Client ID من Google Cloud في الإعدادات أولاً");
     await loadGis();
@@ -27,7 +27,7 @@ window.Drive = (() => {
       });
       client._id = clientId;
     }
-    return new Promise((res, rej) => { pending = { res, rej }; client.requestAccessToken({ prompt: interactive ? "" : "none" }); });
+    return new Promise((res, rej) => { pending = { res, rej }; client.requestAccessToken({ prompt: interactive ? "" : "none", hint: hint || undefined }); });
   }
   const connected = () => !!token && Date.now() < expires - 60000;
   function signOut() { if (token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {}); token = null; expires = 0; }
@@ -87,5 +87,6 @@ window.Drive = (() => {
     const j = await (await api("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", { method: "POST", ...m })).json();
     return j.webViewLink;
   }
-  return { signIn, signOut, connected, pull, push, uploadSheet, FOLDER };
+  async function about() { const j = await (await api("about?fields=user(displayName,emailAddress,photoLink)")).json(); return { email: j.user?.emailAddress || "", name: j.user?.displayName || "", photo: j.user?.photoLink || "" }; }
+  return { signIn, signOut, connected, pull, push, uploadSheet, about, FOLDER };
 })();

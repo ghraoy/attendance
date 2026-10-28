@@ -140,5 +140,23 @@ const Core = (() => {
     return out.sort((a, b) => toMin(a.slot.from) - toMin(b.slot.from));
   }
 
-  return { WEEKDAYS, PRESETS, uid, clone, dow, addDays, toMin, slotHours, blankRegister, registerName, migrate, emptyDB, isHoliday, isDuty, termWeeks, studentWeeks, subjectWeeklyHours, plannedHours, sessionHours, status, stats, level, LEVEL_TEXT, studentLevel, scheduledOn };
+  // Merge two copies of an account (this device vs Google Drive): per register the newer copy wins,
+  // deletions are kept as tombstones so a register deleted on one device does not come back.
+  function mergeDB(a, b) {
+    if (!b || !(b.registers || b.deleted)) return a;
+    if (!a) return b;
+    const stamp = r => r.updatedAt || r.createdAt || "";
+    const dead = new Map();
+    for (const t of [...(a.deleted || []), ...(b.deleted || [])]) if (!dead.has(t.id) || dead.get(t.id) < t.at) dead.set(t.id, t.at);
+    const byId = new Map(), order = [];
+    for (const r of [...(a.registers || []), ...(b.registers || [])]) { if (!byId.has(r.id)) order.push(r.id); const x = byId.get(r.id); if (!x || stamp(r) > stamp(x)) byId.set(r.id, r); }
+    const registers = order.map(id => byId.get(id)).filter(r => !(dead.has(r.id) && dead.get(r.id) >= stamp(r)));
+    const has = id => registers.some(r => r.id === id);
+    return { version: 2, registers, deleted: [...dead].map(([id, at]) => ({ id, at })),
+      current: has(a.current) ? a.current : has(b.current) ? b.current : registers[0]?.id || null,
+      updatedAt: [a.updatedAt || "", b.updatedAt || ""].sort().pop() };
+  }
+  const sameData = (a, b) => !!a && !!b && JSON.stringify([a.registers, a.deleted || []]) === JSON.stringify([b.registers, b.deleted || []]);
+
+  return { mergeDB, sameData, WEEKDAYS, PRESETS, uid, clone, dow, addDays, toMin, slotHours, blankRegister, registerName, migrate, emptyDB, isHoliday, isDuty, termWeeks, studentWeeks, subjectWeeklyHours, plannedHours, sessionHours, status, stats, level, LEVEL_TEXT, studentLevel, scheduledOn };
 })();
