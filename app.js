@@ -81,7 +81,7 @@ function welcome() {
 }
 
 /* ===== about · credits · license · consent ===== */
-const AUTHOR = "م.م. سجاد مهدي الغراوي", AUTHOR_EN = "Asst. Lect. Sajjad Mahdi Al-Gharawi", TERMS_V = 1;
+const AUTHOR = "م.م. سجاد مهدي الغراوي", AUTHOR_EN = "Asst. Lect. Sajjad Mahdi Al-Ghraoy", TERMS_V = 1;
 function aboutView() {
   const cite = `${AUTHOR} (2026). سجل الحضور الجامعي — تطبيق لحساب الحضور والغياب والإنذارات، الإصدار ${APP_VERSION}. متاح على: https://ghraoy.github.io/attendance`;
   return `<div class="panel hero"><img src="icon-192.png" alt="">
@@ -772,7 +772,7 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
