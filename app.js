@@ -28,6 +28,7 @@ const ui = { subject: "", student: "", onlyAbs: false, preview: null, answer: ""
 function saveCfg() { store(CFG, C); }
 function commit(msg) {
   DB.updatedAt = new Date().toISOString();
+  if (C.drive.clientId && !C.pendingSync) { C.pendingSync = true; saveCfg(); } // queued for upload until a sync succeeds
   if (!store(KEY, DB)) toast("تعذّر الحفظ على هذا الجهاز — مساحة المتصفح ممتلئة أو محجوبة");
   render(); if (msg) toast(msg);
   scheduleSync();
@@ -349,7 +350,8 @@ function setupView() {
      <li>ChatGPT: <code>platform.openai.com/api-keys</code> (مدفوع حسب الاستخدام).</li>
      <li>Claude: <code>console.anthropic.com/settings/keys</code> (مدفوع حسب الاستخدام).</li></ol></details></section>
    <section class="panel"><h2 style="margin:0">Google Drive</h2>
-   <div class="${Drive.connected() ? "banner ok" : "banner"}">${Drive.connected() ? "متصل. تُرفع كل السجلات تلقائياً بعد كل تعديل إلى مجلد «" + Drive.FOLDER + "»." : "غير متصل. اضغط «اتصال» واختر حسابك."}${C.lastSync ? "<br>آخر مزامنة: " + new Date(C.lastSync).toLocaleString("ar-IQ") : ""}</div>
+   <div class="${Drive.connected() ? "banner ok" : "banner"}">${Drive.connected() ? "متصل. تُرفع كل السجلات تلقائياً بعد كل تعديل إلى مجلد «" + Drive.FOLDER + "»." : "غير متصل. اضغط «اتصال» واختر حسابك."}${C.lastSync ? "<br>آخر مزامنة: " + new Date(C.lastSync).toLocaleString("ar-IQ") : ""}${C.pendingSync ? "<br><b>توجد تغييرات بانتظار الرفع.</b>" : ""}</div>
+   <p class="muted small" style="margin:0">التطبيق يعمل بالكامل بدون إنترنت: التسجيل والحساب والتصدير. أي تغيير يُحفظ على الجهاز فوراً، ويُرفع إلى Drive تلقائياً عند عودة الاتصال. إذا انتهت جلسة Google (بعد ساعة تقريباً) يظهر في الأعلى «اضغط للرفع».</p>
    <label class="field">Google OAuth Client ID<input id="cid" value="${esc(C.drive.clientId || "")}" style="direction:ltr"></label>
    <div class="row"><button class="btn primary" id="driveGo" type="button">${Drive.connected() ? "مزامنة الآن" : "اتصال"}</button>${Drive.connected() ? `<button class="btn" id="driveOut" type="button">قطع الاتصال</button>` : ""}</div></section>
    <section class="panel"><h2 style="margin:0">التحديثات</h2>
@@ -615,12 +617,31 @@ async function letterAI() {
 /* ===== Drive sync (all registers in one file) ===== */
 let syncing = false, syncTimer = null;
 function syncBadge(state, text) {
-  const b = $("#syncBtn"), on = Drive.connected();
-  state = state || (on ? "" : "off");
-  text = text || (on ? "متزامن مع Drive" : (C.drive.clientId ? "اضغط للمزامنة مع Drive" : "محفوظ على هذا الجهاز"));
+  const b = $("#syncBtn"), on = Drive.connected(), online = navigator.onLine !== false;
+  if (!state && !text) {
+    if (!online) { state = "off"; text = C.pendingSync ? "بدون إنترنت — التغييرات محفوظة وستُرفع عند الاتصال" : "بدون إنترنت — يعمل من الجهاز"; }
+    else if (C.pendingSync && C.drive.clientId) { state = "busy"; text = on ? "تغييرات بانتظار الرفع…" : "تغييرات بانتظار الرفع — اضغط للرفع"; }
+    else { state = on ? "" : "off"; text = on ? "متزامن مع Drive" : (C.drive.clientId ? "اضغط للمزامنة مع Drive" : "محفوظ على هذا الجهاز"); }
+  }
   b.className = "save " + state; b.querySelector("span").textContent = text;
+  b.title = text;
 }
-function scheduleSync() { if (!Drive.connected()) return; syncBadge("busy", "سيُرفع إلى Drive…"); clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(false), 3000); }
+function scheduleSync() {
+  syncBadge();
+  if (!Drive.connected() || navigator.onLine === false) return; // stays queued; uploaded when back online
+  clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(false), 3000);
+}
+// back online, or app reopened: flush the queue
+function flushQueue() {
+  syncBadge();
+  if (!C.pendingSync || !C.drive.clientId || navigator.onLine === false) return;
+  if (Drive.connected()) syncNow(false);
+}
+window.addEventListener("online", () => { toast("عاد الاتصال بالإنترنت"); flushQueue(); });
+window.addEventListener("offline", () => { syncBadge(); toast("انقطع الإنترنت — استمر بالعمل، وسيُرفع كل شيء عند الاتصال"); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") flushQueue(); });
+setInterval(() => { if (C.pendingSync && Drive.connected() && navigator.onLine !== false && !syncing) syncNow(false); }, 60e3);
+// the Google session lasts about an hour; when it has expired, the next tap on the badge renews it and uploads the queue
 async function syncNow(interactive) {
   if (syncing) return; syncing = true; syncBadge("busy", "جارٍ المزامنة…");
   try {
@@ -633,11 +654,18 @@ async function syncNow(interactive) {
       if (interactive) { await Drive.push(C.drive, DB); toast("رُفعت نسختك. النسخة السابقة محفوظة في سجل إصدارات الملف على Drive"); }
       else { DB = remote; store(KEY, DB); toast("سُحبت نسخة أحدث من جهاز آخر"); }
     } else if (!remote || (DB.updatedAt || "") !== (remote.updatedAt || "")) await Drive.push(C.drive, DB);
-    C.lastSync = new Date().toISOString(); saveCfg(); render();
-  } catch (err) { syncBadge("err", "تعذّرت المزامنة"); if (interactive) toast(err.message); }
+    C.lastSync = new Date().toISOString(); C.pendingSync = false; saveCfg(); render();
+  } catch (err) {
+    if (navigator.onLine === false) syncBadge(); else syncBadge("err", C.pendingSync ? "تعذّر الرفع — التغييرات محفوظة، اضغط للمحاولة" : "تعذّرت المزامنة");
+    if (interactive) toast(navigator.onLine === false ? "لا يوجد إنترنت الآن — التغييرات محفوظة على الجهاز" : err.message);
+  }
   syncing = false;
 }
-$("#syncBtn").onclick = () => { if (!C.drive.clientId) { location.hash = "setup"; toast("أضف Client ID أولاً"); return; } syncNow(true); };
+$("#syncBtn").onclick = () => {
+  if (!C.drive.clientId) { location.hash = "setup"; toast("أضف Client ID أولاً"); return; }
+  if (navigator.onLine === false) { toast("لا يوجد إنترنت الآن — التغييرات محفوظة على الجهاز وستُرفع عند الاتصال"); return; }
+  syncNow(true);
+};
 async function sheetToDrive() {
   if (!C.drive.clientId) { location.hash = "setup"; toast("اربط Google Drive أولاً من الإعدادات"); return; }
   try { await Drive.signIn(C.drive.clientId, true); const link = await Drive.uploadSheet(C.drive, `${Core.registerName(R())} ${today()}`, await Template.build(R())); saveCfg(); toast("رُفعت نسخة Google Sheets إلى مجلد «" + Drive.FOLDER + "»"); if (link) window.open(link, "_blank"); }
@@ -651,7 +679,7 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-const APP_VERSION = "v8";
+const APP_VERSION = "v9";
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
@@ -662,3 +690,4 @@ window.addEventListener("hashchange", render);
 if (DB.registers.length && !DB.current) DB.current = DB.registers[0].id;
 store(KEY, DB);
 render();
+flushQueue();

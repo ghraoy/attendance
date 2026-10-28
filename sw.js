@@ -1,5 +1,5 @@
 // Offline cache: app shell + libraries. API calls (AI, Google) always go to the network.
-const VERSION = "v8";
+const VERSION = "v9";
 const SHELL = ["./", "index.html", "app.css", "app.js", "core.js", "template.js", "ai.js", "drive.js", "importer.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js", "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"];
@@ -17,6 +17,11 @@ self.addEventListener("fetch", e => {
   const url = new URL(req.url);
   if (!CACHEABLE.some(o => url.href.startsWith(o))) return;
   // stale-while-revalidate: open instantly from cache, refresh in background
+  if (req.mode === "navigate" && url.origin === self.location.origin) {
+    // pages: network first (fresh), cached app shell when offline
+    e.respondWith(fetch(req).then(r => { if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put("./", copy)); } return r; }).catch(() => caches.match("./", { ignoreSearch: true }).then(h => h || caches.match("index.html"))));
+    return;
+  }
   e.respondWith(caches.open(VERSION).then(async c => {
     const hit = await c.match(req, { ignoreSearch: url.origin === self.location.origin });
     const net = fetch(req).then(r => { if (r && (r.ok || r.type === "opaque")) c.put(req, r.clone()); return r; }).catch(() => hit);
