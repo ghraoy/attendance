@@ -30,10 +30,15 @@ function commit(msg) {
 }
 
 /* ===== attendance logic ===== */
+const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const offDays = () => S.settings.offDays ?? [3, 4]; // default: no duty on Wednesday and Thursday
+const isOffDay = d => offDays().includes(new Date(d + "T12:00:00").getDay());
 function status(sess, stu) {
   if (sess.date < stu.start) return "N";
   if ((stu.exempt || []).includes(sess.subject)) return "E";
-  return (sess.absent || []).includes(stu.id) ? "A" : "P";
+  const absent = (sess.absent || []).includes(stu.id);
+  if (absent && isOffDay(sess.date)) return "N"; // absence on a no-duty day is never counted
+  return absent ? "A" : "P";
 }
 const subj = id => S.subjects.find(s => s.id === id);
 function stats(stuId, subId) {
@@ -187,6 +192,7 @@ function setupView() {
    <div class="scroll"><table><thead><tr><th class="l">الاسم</th><th>يُحسب من</th><th class="l">مواد مستوفاة</th><th></th></tr></thead><tbody>${stuRows}</tbody></table></div></section>
    <section class="panel"><h2 style="margin:0">عام</h2><div class="grid2">
    <label class="field">خط الإنذار (% من الساعات)<input id="thr" type="number" min="1" max="100" value="${S.settings.threshold}"></label>
+   <div class="field" style="grid-column:1/-1">أيام لا دوام فيها (الغياب فيها لا يُحسب، والحضور يُحسب)<div class="ex">${WEEKDAYS.map((d, i) => `<label><input type="checkbox" data-off="${i}" ${offDays().includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div></div>
    <label class="field">الفصل الدراسي<input id="term" value="${esc(S.settings.term)}"></label>
    <label class="field" style="grid-column:1/-1">البرنامج والقسم<input id="prog" value="${esc(S.settings.program)}"></label></div></section>
 
@@ -270,6 +276,7 @@ function bind(v) {
     document.querySelectorAll("[data-delstu]").forEach(b => b.onclick = () => twoStep(b, () => { S.students = S.students.filter(s => s.id !== b.dataset.delstu); commit(); }));
     $("#addSub").onclick = () => { S.subjects.push({ id: "s" + uid(), name: "مادة جديدة", teacher: "", hours: 2 }); commit(); };
     $("#addStu").onclick = () => { S.students.push({ id: "t" + uid(), name: "طالب جديد", start: today(), exempt: [] }); commit(); };
+    document.querySelectorAll("[data-off]").forEach(c => c.onchange = () => { S.settings.offDays = [...document.querySelectorAll("[data-off]:checked")].map(x => +x.dataset.off); commit("حُدّثت أيام الدوام"); });
     $("#thr").onchange = e => { S.settings.threshold = Math.min(100, Math.max(1, +e.target.value || 10)); commit(); };
     $("#term").onchange = e => { S.settings.term = e.target.value; commit(); };
     $("#prog").onchange = e => { S.settings.program = e.target.value; commit(); };
