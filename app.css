@@ -113,3 +113,8 @@ code{background:var(--sunk);padding:1px 6px;border-radius:4px;direction:ltr;unic
   #printArea{display:block!important;white-space:pre-wrap;font-family:var(--f-body);font-size:14pt;line-height:2;padding:2cm;color:#000;background:#fff}
 }
 @media (prefers-reduced-motion:no-preference){.card,.sess{transition:border-color .15s}}
+.regsel{max-width:min(320px,70vw);border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--surface);font-weight:600}
+.seg button[aria-pressed="true"].X{background:var(--exempt-bg);color:var(--exempt)}
+.p-X{background:var(--exempt-bg);color:var(--exempt)}
+.setup input[type=time]{border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--surface)}
+.setup select{border:1px solid var(--line);border-radius:6px;padding:3px 6px;background:var(--surface)}

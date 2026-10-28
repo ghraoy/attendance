@@ -9,7 +9,8 @@ window.Importer = (() => {
   const P = ["حاضر", "حاضره", "ح", "p", "present", "1", "✓", "✔", "نعم", "yes"].map(norm);
   const A = ["غائب", "غائبه", "غ", "a", "absent", "0", "✗", "✘", "x", "لا", "no"].map(norm);
   const E = ["مستوفيه", "مستوفي", "معفي", "معفي من الماده", "exempt"].map(norm);
-  const statusOf = v => { const n = norm(v); if (!n) return null; if (P.includes(n)) return "P"; if (A.includes(n)) return "A"; if (E.includes(n)) return "E"; return null; };
+  const X = ["مجاز", "مجازه", "بعذر", "غائب بعذر", "اجازه", "excused"].map(norm);
+  const statusOf = v => { const n = norm(v); if (!n) return null; if (P.includes(n)) return "P"; if (A.includes(n)) return "A"; if (X.includes(n)) return "X"; if (E.includes(n)) return "E"; return null; };
 
   function toYMD(v) {
     if (v == null || v === "") return null;
@@ -75,6 +76,7 @@ window.Importer = (() => {
 
   // Turn records into a plan against the current state (nothing is changed until apply()).
   function plan(S, recs) {
+    S = { ...S, subjects: S.subjects || [], students: S.students || [], sessions: S.sessions || [] };
     const newSubjects = [], newStudents = [], uid = () => Math.random().toString(36).slice(2, 9);
     const subjects = [...S.subjects], students = S.students.map(x => ({ ...x, exempt: [...(x.exempt || [])] }));
     const sub = (n, m = {}) => { let s = matchBy(subjects, n); if (!s) { s = { id: "s" + uid(), name: n, teacher: m.teacher || "", hours: m.hours > 0 ? m.hours : 2 }; subjects.push(s); newSubjects.push(s); } return s; };
@@ -90,14 +92,73 @@ window.Importer = (() => {
     }
     const newExempt = [];
     for (const [st, sid] of exempt) if (!st.exempt.includes(sid)) { st.exempt.push(sid); newExempt.push(st.name + " ← " + subjects.find(x => x.id === sid).name); }
-    let created = 0, updated = 0, absences = 0; const sessions = S.sessions.map(x => ({ ...x, absent: [...(x.absent || [])] }));
+    let created = 0, updated = 0, absences = 0; const sessions = S.sessions.map(x => ({ ...x, absent: [...(x.absent || [])], excused: [...(x.excused || [])] }));
     for (const e of byKey.values()) {
       let s = sessions.find(x => x.date === e.date && x.subject === e.subject);
-      if (s) updated++; else { s = { id: "x" + uid(), date: e.date, subject: e.subject, note: e.note || "", absent: [] }; sessions.push(s); created++; }
-      for (const [id, st] of Object.entries(e.marks)) { s.absent = s.absent.filter(x => x !== id); if (st === "A") { s.absent.push(id); absences++; } }
+      if (s) updated++; else { s = { id: "x" + uid(), date: e.date, subject: e.subject, note: e.note || "", absent: [], excused: [] }; sessions.push(s); created++; }
+      for (const [id, st] of Object.entries(e.marks)) { s.absent = s.absent.filter(x => x !== id); s.excused = s.excused.filter(x => x !== id); if (st === "A") { s.absent.push(id); absences++; } if (st === "X") s.excused.push(id); }
       if (e.note && !s.note) s.note = e.note;
     }
     return { created, updated, absences, newSubjects, newStudents, newExempt: [...new Set(newExempt)], next: { ...S, subjects, students, sessions } };
+  }
+
+  /* ----- full register template (sheets: الإعدادات، العطل، المواد، الطلبة، الحضور) ----- */
+  const DAYS = ["الاحد", "الاثنين", "الثلاثاء", "الاربعاء", "الخميس", "الجمعه", "السبت"];
+  const dayIndex = v => { const n = norm(v); if (!n) return null; const i = DAYS.findIndex(d => n === d || n.startsWith(d) || d.startsWith(n)); return i >= 0 ? i : null; };
+  function toHM(v) {
+    if (v == null || v === "") return "";
+    if (typeof v === "number") { const m = Math.round((v % 1) * 1440); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); }
+    if (v instanceof Date) return String(v.getHours()).padStart(2, "0") + ":" + String(v.getMinutes()).padStart(2, "0");
+    const m = String(v).replace(/[٠-٩]/g, c => "٠١٢٣٤٥٦٧٨٩".indexOf(c)).match(/(\d{1,2})[:.](\d{2})/); if (!m) { const h = String(v).match(/^\s*(\d{1,2})\s*$/); return h ? h[1].padStart(2, "0") + ":00" : ""; }
+    return m[1].padStart(2, "0") + ":" + m[2];
+  }
+  const yes = v => ["نعم", "yes", "1", "true", "✓", "صح"].includes(norm(v));
+  const SETTINGS = [
+    ["university", "الجامعه"], ["college", "الكليه"], ["department", "القسم"], ["level", "نوع الدراسه"], ["degree", "الشهاده"], ["shift", "الدراسه"],
+    ["stage", "المرحله"], ["section", "الشعبه"], ["system", "النظام الدراسي"], ["semester", "الفصل الدراسي"], ["year", "العام الدراسي"],
+    ["start", "تاريخ بدايه الفصل"], ["end", "تاريخ نهايه الفصل"], ["weeks", "عدد الاسابيع"], ["basis", "اساس حساب النسبه"],
+    ["warn1", "الانذار الاولي"], ["warn2", "الانذار الثاني"], ["warn3", "الحرمان"], ["countExcused", "احتساب الغياب بعذر"]];
+  const rowsOf = (wb, name) => { const sh = wb.Sheets[name]; return sh ? XLSX.utils.sheet_to_json(sh, { header: 1, raw: true, defval: "" }) : null; };
+  const isTemplate = wb => wb.SheetNames.includes("الإعدادات") && wb.SheetNames.includes("المواد");
+  function fromTemplate(wb) {
+    const R = Core.blankRegister();
+    const set = {}; const duty = [];
+    for (const r of rowsOf(wb, "الإعدادات") || []) {
+      const lab = norm(r[0]); if (!lab) continue;
+      const day = DAYS.findIndex(d => lab === "دوام يوم " + d || lab === "يوم " + d || lab === d);
+      if (day >= 0) { if (yes(r[1])) duty.push(day); continue; }
+      const k = SETTINGS.find(([, l]) => lab.startsWith(l)); if (k && set[k[0]] === undefined) set[k[0]] = r[1];
+    }
+    const txt = v => String(v ?? "").trim();
+    const level = norm(set.level).includes("اولي") ? "أولية" : "عليا";
+    Object.assign(R, Core.blankRegister({ level }));
+    for (const k of ["university", "college", "department", "degree", "shift", "stage", "section", "system", "semester", "year"]) if (txt(set[k])) R.meta[k] = txt(set[k]);
+    R.meta.level = level;
+    R.calendar.start = toYMD(set.start) || ""; R.calendar.end = toYMD(set.end) || "";
+    R.calendar.weeks = /^\d+$/.test(txt(set.weeks)) ? +set.weeks : 0;
+    if (duty.length) R.calendar.dutyDays = duty.sort();
+    if (txt(set.basis)) R.rules.basis = norm(set.basis).includes("لكل ماده") ? "subject" : "total";
+    const pctv = v => { const n = parseFloat(String(v).replace("%", "")); return isNaN(n) ? null : (n > 0 && n < 1 ? n * 100 : n); };
+    for (const k of ["warn1", "warn2", "warn3"]) { const n = pctv(set[k]); if (n != null) R.rules[k] = n; }
+    if (txt(set.countExcused)) R.rules.countExcused = yes(set.countExcused);
+    for (const r of (rowsOf(wb, "العطل") || []).slice(1)) { const from = toYMD(r[0]); if (from) R.calendar.holidays.push({ from, to: toYMD(r[1]) || from, name: txt(r[2]) }); }
+    const sr = rowsOf(wb, "المواد") || []; const sh = sr.findIndex(r => r.some(c => norm(c) === "اسم الماده"));
+    for (const r of sr.slice(sh + 1)) {
+      const name = txt(r[1]); if (!name) continue;
+      const slots = [];
+      for (let j = 5; j + 2 < 14 + 1; j += 3) { const d = dayIndex(r[j]); const from = toHM(r[j + 1]), to = toHM(r[j + 2]); if (d != null && from && to) slots.push({ day: d, from, to }); }
+      const hrs = parseFloat(r[16]), pw = parseFloat(r[17]);
+      R.subjects.push({ id: "s" + Core.uid(), name, code: txt(r[2]), teacher: txt(r[3]), kind: txt(r[4]) || "نظري", slots, hours: hrs > 0 ? hrs : slots[0] ? Core.slotHours(slots[0]) : 2, perWeek: slots.length || (pw > 0 ? pw : 1) });
+    }
+    const tr = rowsOf(wb, "الطلبة") || []; const th = tr.findIndex(r => r.some(c => norm(c) === "اسم الطالب"));
+    for (const r of tr.slice(th + 1)) {
+      const name = txt(r[1]); if (!name) continue;
+      const exempt = txt(r[3]).split(/[،,;\n]+/).map(x => matchBy(R.subjects, x)).filter(Boolean).map(x => x.id);
+      R.students.push({ id: "t" + Core.uid(), name, start: toYMD(r[2]) || R.calendar.start || "", exempt });
+    }
+    const ar = rowsOf(wb, "الحضور");
+    const p = plan(R, ar ? readTable(ar, "") : []);
+    return { R: { ...p.next, meta: R.meta, calendar: R.calendar, rules: R.rules, id: R.id, createdAt: R.createdAt }, plan: p };
   }
 
   function template() {
@@ -107,5 +168,5 @@ window.Importer = (() => {
     XLSX.utils.book_append_sheet(wb, ws, "الحضور");
     return XLSX.write(wb, { type: "array", bookType: "xlsx" });
   }
-  return { fromWorkbook, fromText, plan, template, norm, matchBy, toYMD };
+  return { fromWorkbook, fromText, plan, template, norm, matchBy, toYMD, isTemplate, fromTemplate, toHM, dayIndex };
 })();
