@@ -17,6 +17,8 @@ const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); retu
 let S = load(KEY, null) || clone(window.SEED);
 let C = load(CFG, { provider: "gemini", keys: {}, models: {}, drive: { clientId: "" }, lastSync: null });
 C.keys ||= {}; C.models ||= {}; C.drive ||= { clientId: "" };
+const DEFAULT_CLIENT_ID = "629045560897-1ritqqkb0qcul2km6ifik0mrq315ru3s.apps.googleusercontent.com";
+if (!C.drive.clientId && location.hostname === "ghraoy.github.io") C.drive.clientId = DEFAULT_CLIENT_ID;
 const ui = { subject: "", student: "", onlyAbs: false, preview: null, answer: "", asking: false, letter: "", photoBusy: false, modelLists: {} };
 
 function saveCfg() { store(CFG, C); }
