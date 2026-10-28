@@ -202,7 +202,7 @@ function importView() {
   ${tpl}${preview}
   <div class="panels">
     <div class="panel"><h3>نموذج Excel الكامل</h3>
-      <p class="muted small" style="margin:0">نموذج موحّد لأي قسم ومرحلة: الإعدادات، العطل، المواد وجدولها، الطلبة، والحضور، مع ملخص يحسب النسب. نزّله فارغاً واملأه، أو صدّر السجل الحالي بنفس الشكل.</p>
+      <p class="muted small" style="margin:0">نموذج موحّد لأي قسم ومرحلة: الإعدادات، العطل، المواد وجدولها، الطلبة، و<b>كشف حضور لكل مادة</b> بتواريخ المحاضرات تُولَّد تلقائياً من الجدول (يُكتب فيه غ / م / ح)، مع ملخص يحسب الساعات والنسب والإنذارات. نزّله فارغاً واملأه، أو صدّر السجل الحالي بنفس الشكل.</p>
       <div class="row"><button class="btn" id="tplBlank" type="button">تنزيل النموذج فارغاً</button>${R() ? `<button class="btn" id="tplExport" type="button">تصدير السجل الحالي بالنموذج</button>` : ""}</div>
       <label class="btn primary" style="justify-self:start">استيراد ملف Excel<input type="file" id="xfile" accept=".xlsx,.xls,.csv" hidden></label>
       <p class="muted small" style="margin:0">يقبل النموذج الموحّد (يُنشئ سجلاً كاملاً)، أو أي ملف فيه أعمدة: التاريخ، المادة، الطالب، الحالة (يُضاف للسجل الحالي).</p>
@@ -679,7 +679,7 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });

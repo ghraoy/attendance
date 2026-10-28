@@ -52,7 +52,7 @@ window.Template = (() => {
       ["2) ورقة «العطل»: العطل الرسمية والانقطاعات (تُخصم في التطبيق تلقائياً؛ في Excel خفّض «عدد الأسابيع» إن أردت خصمها).", ""],
       ["3) ورقة «المواد»: اسم المادة والتدريسي، ومواعيدها في الأسبوع (حتى 3 مواعيد: اليوم ومن وإلى). إن لم يكن لها جدول اكتب ساعات المحاضرة وعدد المحاضرات في الأسبوع.", ""],
       ["4) ورقة «الطلبة»: الاسم، وتاريخ بدء الدوام (للملتحق متأخراً)، والمواد المستوفاة أو المعفى منها (اكتب أسماءها مفصولة بفاصلة).", ""],
-      ["5) ورقة «الحضور»: سطر لكل طالب في كل محاضرة: التاريخ، المادة، الطالب، الحالة (حاضر / غائب / مجاز). اليوم والساعات تُملأ تلقائياً.", ""],
+      ["5) أوراق «كشف 1، كشف 2 …»: كشف لكل مادة بنفس ترتيب ورقة المواد. الطلبة في الصفوف وتواريخ المحاضرات في الأعمدة، تُولَّد تلقائياً من جدول المادة وتاريخي الفصل. اكتب غ للغائب، م للمجاز، ح للحاضر (أو اتركها فارغة).", ""],
       ["6) ورقة «الملخص»: ساعات الغياب والساعات المقررة والنسبة لكل طالب في كل مادة، والنسبة الكلية والحالة (ضمن الحد / إنذار أولي / إنذار ثانٍ / حرمان).", ""],
       ["الغياب في يوم ليس يوم دوام لا يُحسب. الغياب بعذر (مجاز) لا يُحسب إلا إذا اخترت ذلك في الإعدادات.", ""],
       ["التطبيق: https://ghraoy.github.io/attendance/ — استورد هذا الملف من «إدخال البيانات» فيُنشأ السجل كاملاً، ويمكنك تصديره بنفس الشكل.", ""]
@@ -116,37 +116,88 @@ window.Template = (() => {
       put(ts, r, 6, { formula: `IF(B${r}="","",IF(OR(NOT(ISNUMBER(C${r})),C${r}<=${ref("start")}),${ref("weeksUsed")},MAX(0,MIN(${ref("weeksUsed")},ROUNDUP((${ref("end")}-C${r}+1)/7,0)))))` }, { bold: true });
     }
 
-    /* ---- الحضور ---- */
-    const as = sheet(wb, "الحضور", [13, 11, 28, 32, 12, 10, 14, 30]);
-    title(as, "سجل الحضور", "سطر لكل طالب في كل محاضرة. الحالة: حاضر / غائب / مجاز. اليوم والساعات وساعات الغياب المحسوبة تُملأ تلقائياً.", 8);
-    header(as, 4, ["التاريخ", "اليوم", "المادة", "الطالب", "الحالة", "الساعات", "ساعات الغياب المحسوبة", "ملاحظات"]);
-    const entries = [];
-    if (R) for (const se of [...R.sessions].sort((a, b) => a.date.localeCompare(b.date))) {
-      const su = subjects.find(s => s.id === se.subject); if (!su) continue;
-      for (const t of students) {
-        const x = Core.status(R, se, t), absent = (se.absent || []).includes(t.id), excused = (se.excused || []).includes(t.id);
-        // write what happened; the sheet's own formulas decide what counts (duty days, start date, excused rule)
-        const txt = x === "E" ? "مستوفية" : excused ? "مجاز" : absent ? (t.start && se.date < t.start ? "غير مطالب" : "غائب") : x === "N" ? "غير مطالب" : "حاضر";
-        entries.push([se.date, su.name, t.name, txt, Core.sessionHours(R, se), se.note || ""]);
+    /* ---- كشوف الحضور: ورقة لكل مادة (الكشف j ↔ صف المادة j في ورقة المواد) ---- */
+    const DAYS_ARR = `{${DAYS.map(d => `"${d}"`).join(",")}}`;
+    const CHOOSE_DAY = x => `CHOOSE(WEEKDAY(${x}),${DAYS.map(d => `"${d}"`).join(",")})`;
+    const KS = []; // per subject: {name, colTotHours, colPlanned}
+    const NK = R ? Math.max(subjects.length, 1) : NS;
+    for (let j = 0; j < NK; j++) {
+      const R0 = SUB0 + j, su = subjects[j], sheetName = `كشف ${j + 1}`;
+      // lecture dates: held sessions + remaining timetable dates (filled export) or formulas (blank)
+      let dates = [];
+      if (R && su) {
+        const held = R.sessions.filter(x => x.subject === su.id).map(x => x.date);
+        const last = held.length ? held.reduce((m, d) => d > m ? d : m) : null;
+        const future = [];
+        if ((su.slots || []).length && cal.start && cal.end) for (let d = Core.addDays(last || Core.addDays(cal.start, -1), 1); d <= cal.end; d = Core.addDays(d, 1)) if (!Core.isHoliday(R, d) && su.slots.some(x => +x.day === Core.dow(d))) future.push(d);
+        dates = [...new Set([...held, ...future])].sort();
       }
+      const NC = Math.max(40, dates.length + 6), C0 = 4, CL = C0 + NC - 1;
+      const ks = wb.addWorksheet(sheetName, { views: [{ rightToLeft: true, state: "frozen", xSplit: 3, ySplit: 7 }], properties: { defaultRowHeight: 18 } });
+      ks.columns = [{ width: 5 }, { width: 28 }, { width: 11 }, ...Array(NC).fill({ width: 6.5 }), { width: 9 }, { width: 10 }, { width: 8 }, { width: 10 }, { width: 10 }];
+      ks.pageSetup = { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+      const L = c => ks.getColumn(c).letter, fc = L(C0), lc = L(CL);
+      const tA = CL + 1, tH = CL + 2, tX = CL + 3, tP = CL + 4, tR = CL + 5;
+      // row 3 (hidden helpers): subject name, slot weekdays, slot hours, default hours, term dates
+      const nameF = `IF('المواد'!$B$${R0}="","",'المواد'!$B$${R0})`;
+      put(ks, 3, 1, "مساعد"); put(ks, 3, 3, su ? { formula: nameF, result: su.name } : { formula: nameF });
+      [["F", 4], ["I", 5], ["L", 6]].forEach(([c, k]) => put(ks, 3, k, { formula: `IFERROR(MATCH('المواد'!$${c}$${R0},${DAYS_ARR},0),"")` }));
+      [["G", "H", 7], ["J", "K", 8], ["M", "N", 9]].forEach(([f, t, k]) => put(ks, 3, k, { formula: `IFERROR(ROUND((N('المواد'!$${t}$${R0})-N('المواد'!$${f}$${R0}))*24,2),0)` }));
+      put(ks, 3, 10, { formula: `IF(N('المواد'!$Q$${R0})>0,'المواد'!$Q$${R0},2)` });
+      put(ks, 3, 11, { formula: ref("start") }); put(ks, 3, 12, { formula: ref("end") });
+      ks.getRow(3).hidden = true;
+      ks.mergeCells(1, 1, 1, tR); ks.mergeCells(2, 1, 2, tR);
+      put(ks, 1, 1, { formula: `"كشف حضور مادة: "&IF($C$3="","(اكتب اسم المادة في الصف ${j + 1} من ورقة المواد)",$C$3)&"  —  "&IFERROR('المواد'!$D$${R0},"")`, result: su ? `كشف حضور مادة: ${su.name}  —  ${su.teacher || ""}` : undefined }, { bold: true, align: "right", color: HEAD });
+      ks.getCell(1, 1).font = { name: FONT, size: 14, bold: true, color: { argb: HEAD } };
+      put(ks, 2, 1, "اكتب في خانة كل طالب: غ = غائب · م = مجاز (غياب بعذر) · ح = حاضر (أو اتركها فارغة). التواريخ تُولَّد من جدول المادة والتقويم، ويمكنك الكتابة فوقها. العمود الرمادي = عطلة أو ليس يوم دوام.", { align: "right", color: MUTED });
+      ks.getRow(1).height = 26; ks.getRow(2).height = 30;
+      // rows 4-7: date / weekday / hours / duty-day
+      header(ks, 4, ["ت", "اسم الطالب", "يبدأ دوامه"]);
+      put(ks, 5, 2, "اليوم", { bold: true, fill: SUBH }); put(ks, 6, 2, "ساعات المحاضرة", { bold: true, fill: SUBH }); put(ks, 7, 2, "يوم دوام؟", { bold: true, fill: SUBH });
+      const holiday = x => `COUNTIFS('العطل'!$A:$A,"<="&${x},'العطل'!$B:$B,">="&${x})>0`;
+      const next = x => `${x}+MIN(IF($D$3="",99,MOD($D$3-WEEKDAY(${x})-1,7)+1),IF($E$3="",99,MOD($E$3-WEEKDAY(${x})-1,7)+1),IF($F$3="",99,MOD($F$3-WEEKDAY(${x})-1,7)+1))`;
+      for (let k = 0; k < NC; k++) {
+        const c = C0 + k, X = L(c), P = k ? L(c - 1) : null, d = dates[k];
+        const f = k === 0 ? `IF(AND(ISNUMBER($K$3),COUNT($D$3:$F$3)>0),IF(${next("($K$3-1)")}>$L$3,"",${next("($K$3-1)")}),"")` : `IF(NOT(ISNUMBER(${P}4)),"",IF(COUNT($D$3:$F$3)=0,"",IF(${next(P + "4")}>$L$3,"",${next(P + "4")})))`;
+        put(ks, 4, c, R ? (d ? ymdToDate(d) : null) : { formula: f }, { bold: true, fill: INPUT, fmt: "d/m", color: INK });
+        ks.getCell(4, c).alignment = { horizontal: "center", vertical: "middle", textRotation: 90 };
+        put(ks, 5, c, { formula: `IF(NOT(ISNUMBER(${X}4)),"",IF(${holiday(X + "4")},"عطلة",${CHOOSE_DAY(X + "4")}))` }, { color: MUTED });
+        ks.getCell(5, c).alignment = { horizontal: "center", vertical: "middle", textRotation: 90 };
+        const se = R && su && d ? R.sessions.find(x => x.subject === su.id && x.date === d) : null;
+        put(ks, 6, c, se && se.hours ? +se.hours : { formula: `IF(NOT(ISNUMBER(${X}4)),0,IF(${holiday(X + "4")},0,IF(AND(WEEKDAY(${X}4)=N($D$3),$G$3>0),$G$3,IF(AND(WEEKDAY(${X}4)=N($E$3),$H$3>0),$H$3,IF(AND(WEEKDAY(${X}4)=N($F$3),$I$3>0),$I$3,$J$3)))))` }, { fmt: "0.##;;;" });
+        put(ks, 7, c, { formula: `IF(NOT(ISNUMBER(${X}4)),"",IF(${holiday(X + "4")},"لا",IFERROR(VLOOKUP("دوام يوم "&${CHOOSE_DAY(X + "4")},'الإعدادات'!$A:$B,2,0),"نعم")))` }, { color: MUTED });
+      }
+      ["الغيابات", "ساعات الغياب المحسوبة", "مجاز", "الساعات المقررة", "النسبة"].forEach((h, i) => put(ks, 4, tA + i, h, { bold: true, fill: HEAD, color: "FFFFFFFF" }));
+      for (const rr of [5, 6, 7]) for (let i = 0; i < 5; i++) put(ks, rr, tA + i, null, { fill: SUBH });
+      // student rows
+      const S0 = 8;
+      for (let i = 0; i < NT; i++) {
+        const r = S0 + i, t = students[i], nm = `'الطلبة'!$B$${STU0 + i}`;
+        put(ks, r, 1, { formula: `IF($B${r}="","",${i + 1})` });
+        put(ks, r, 2, t ? { formula: `IF(${nm}="","",${nm})`, result: t.name } : { formula: `IF(${nm}="","",${nm})` }, { align: "right" });
+        put(ks, r, 3, { formula: `IF($B${r}="","",IFERROR(IF(ISNUMBER(VLOOKUP($B${r},'الطلبة'!$B:$C,2,0)),VLOOKUP($B${r},'الطلبة'!$B:$C,2,0),${ref("start")}),${ref("start")}))` }, { fmt: "d/m/yyyy", color: MUTED });
+        for (let k = 0; k < NC; k++) {
+          const d = dates[k]; let v = null;
+          if (R && su && t && d) { const se = R.sessions.find(x => x.subject === su.id && x.date === d); if (se) { if ((t.exempt || []).includes(su.id) || (t.start && d < t.start)) v = null; else v = (se.excused || []).includes(t.id) ? "م" : (se.absent || []).includes(t.id) ? "غ" : "ح"; } }
+          put(ks, r, C0 + k, v, { fill: INPUT, list: '"غ,م,ح"' });
+        }
+        const rng = `${fc}${r}:${lc}${r}`, hrs = `$${fc}$6:$${lc}$6`, duty = `($${fc}$7:$${lc}$7="نعم")`, after = `($${fc}$4:$${lc}$4>=$C${r})`;
+        const exempt = `ISNUMBER(SEARCH($C$3,IFERROR(VLOOKUP($B${r},'الطلبة'!$B:$D,3,0),"")&""))`;
+        put(ks, r, tA, { formula: `IF($B${r}="","",COUNTIF(${rng},"غ"))` }, { bold: true });
+        put(ks, r, tH, { formula: `IF($B${r}="","",SUMPRODUCT((${rng}="غ")*${hrs}*${duty}*${after})+IF(${ref("countExcused")}="نعم",SUMPRODUCT((${rng}="م")*${hrs}*${duty}*${after}),0))` }, { bold: true });
+        put(ks, r, tX, { formula: `IF($B${r}="","",COUNTIF(${rng},"م"))` });
+        // planned: with a timetable, the sum of this grid's lecture hours from the student's start (holidays are 0); otherwise weekly hours × weeks
+        put(ks, r, tP, { formula: `IF(OR($B${r}="",$C$3=""),"",IF(${exempt},0,IF(COUNT($D$3:$F$3)>0,SUMPRODUCT(${hrs}*${after}),N('المواد'!$O$${R0})*IFERROR(VLOOKUP($B${r},'الطلبة'!$B:$F,5,0),0))))` });
+        put(ks, r, tR, { formula: `IF(OR($B${r}="",$C$3=""),"",IF(N(${L(tP)}${r})=0,"مستوفية",N(${L(tH)}${r})/${L(tP)}${r}))` }, { bold: true, fmt: "0.0%" });
+      }
+      const grid = `${fc}${S0}:${lc}${S0 + NT - 1}`;
+      ks.addConditionalFormatting({ ref: grid, rules: [
+        { type: "cellIs", operator: "equal", formulae: ['"غ"'], style: { font: { color: { argb: "FFB3262F" }, bold: true }, fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFBE5E6" } } } },
+        { type: "cellIs", operator: "equal", formulae: ['"م"'], style: { font: { color: { argb: "FF2A5D8F" }, bold: true }, fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFE2EDF8" } } } },
+        { type: "expression", formulae: [`${fc}$7="لا"`], style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFE4E7E7" } } } },
+        { type: "expression", formulae: [`AND($B${S0}<>"",$C$3<>"",ISNUMBER(SEARCH($C$3,IFERROR(VLOOKUP($B${S0},'الطلبة'!$B:$D,3,0),"")&"")))`], style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFE2EDF8" } } } }] });
+      KS.push({ sheetName, colH: tH - 1, colP: tP - 1 }); // VLOOKUP column offsets from column B
     }
-    const subList = `'المواد'!$B$${SUB0}:$B$${SUB0 + NS - 1}`, stuList = `'الطلبة'!$B$${STU0}:$B$${STU0 + NT - 1}`;
-    const NA = entries.length + 500;
-    for (let i = 0; i < NA; i++) {
-      const r = 5 + i, e = entries[i];
-      put(as, r, 1, e ? ymdToDate(e[0]) : null, inp({ fmt: "yyyy/mm/dd" }));
-      put(as, r, 2, { formula: `IF(A${r}="","",CHOOSE(WEEKDAY(A${r}),"الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"))` });
-      put(as, r, 3, e ? e[1] : null, inp({ align: "right", list: subList }));
-      put(as, r, 4, e ? e[2] : null, inp({ align: "right", list: stuList }));
-      put(as, r, 5, e ? e[3] : null, inp({ list: '"حاضر,غائب,مجاز,غير مطالب,مستوفية"' }));
-      put(as, r, 6, e ? e[4] : { formula: `IF(C${r}="","",IFERROR(VLOOKUP(C${r},'المواد'!$B:$Q,16,0),2))` }, e ? inp() : {});
-      // counted only when the student is required: on a duty day and not before his start date
-      put(as, r, 7, { formula: `IF(D${r}="","",IF(AND(OR(E${r}="غائب",AND(E${r}="مجاز",${ref("countExcused")}="نعم")),IFERROR(VLOOKUP("دوام يوم "&B${r},'الإعدادات'!$A:$B,2,0),"نعم")="نعم",IFERROR(A${r}>=IF(ISNUMBER(VLOOKUP(D${r},'الطلبة'!$B:$C,2,0)),VLOOKUP(D${r},'الطلبة'!$B:$C,2,0),0),TRUE)),N(F${r}),0))` }, { bold: true });
-      put(as, r, 8, e ? e[5] || null : null, inp({ align: "right" }));
-    }
-    as.addConditionalFormatting({ ref: `E5:E${4 + NA}`, rules: [
-      { type: "cellIs", operator: "equal", formulae: ['"غائب"'], style: { font: { color: { argb: "FFB3262F" }, bold: true }, fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFBE5E6" } } } },
-      { type: "cellIs", operator: "equal", formulae: ['"مجاز"'], style: { font: { color: { argb: "FF2A5D8F" } }, fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFE2EDF8" } } } }] });
 
     /* ---- الملخص ---- */
     const sm = sheet(wb, "الملخص", [5, 30, ...Array(NS).fill(11), 13, 13, 11, 12, 16]);
@@ -168,8 +219,9 @@ window.Template = (() => {
       for (const top of [A0, B0, C0]) { put(sm, top + i, 1, { formula: `IF(${name}="","",${i + 1})` }); put(sm, top + i, 2, { formula: `IF(${name}="","",${name})` }, { align: "right" }); }
       for (let j = 0; j < NS; j++) {
         const c = col(3 + j), h = `${c}$${A0 - 1}`, nB = `$B${A0 + i}`;
-        put(sm, A0 + i, 3 + j, { formula: `IF(OR(${nB}="",${h}=""),"",SUMIFS('الحضور'!$G:$G,'الحضور'!$D:$D,${nB},'الحضور'!$C:$C,${h}))` });
-        put(sm, B0 + i, 3 + j, { formula: `IF(OR(${nB}="",${h}=""),"",IF(ISNUMBER(SEARCH(${h},VLOOKUP(${nB},'الطلبة'!$B:$F,3,0)&"")),0,IFERROR(VLOOKUP(${h},'المواد'!$B:$O,14,0),0)*IFERROR(VLOOKUP(${nB},'الطلبة'!$B:$F,5,0),0)))` });
+        const K = KS[j];
+        put(sm, A0 + i, 3 + j, K ? { formula: `IF(OR(${nB}="",${h}=""),"",IFERROR(N(VLOOKUP(${nB},'${K.sheetName}'!$B:$${sm.getColumn(K.colH + 1).letter},${K.colH},0)),0))` } : "");
+        put(sm, B0 + i, 3 + j, K ? { formula: `IF(OR(${nB}="",${h}=""),"",IFERROR(N(VLOOKUP(${nB},'${K.sheetName}'!$B:$${sm.getColumn(K.colP + 1).letter},${K.colP},0)),0))` } : "");
         put(sm, C0 + i, 3 + j, { formula: `IF(OR(${nB}="",${h}=""),"",IF(N(${c}${B0 + i})=0,"مستوفية",N(${c}${A0 + i})/${c}${B0 + i}))` }, { fmt: "0.0%" });
       }
       const r = A0 + i, first = col(3), last = col(lastSub);
@@ -186,7 +238,7 @@ window.Template = (() => {
       { type: "cellIs", operator: "equal", formulae: ['"إنذار ثانٍ"'], style: { font: { color: { argb: "FFB3262F" }, bold: true }, fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFBE5E6" } } } },
       { type: "cellIs", operator: "equal", formulae: ['"إنذار أولي"'], style: { font: { color: { argb: "FF9A5B00" }, bold: true }, fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFFDF0D8" } } } }] });
     sm.views = [{ rightToLeft: true, state: "frozen", xSplit: 2, ySplit: A0 - 1 }];
-    wb.views = [{ activeTab: R ? 6 : 1 }];
+    wb.views = [{ activeTab: R ? wb.worksheets.length - 1 : 1 }];
     return wb.xlsx.writeBuffer();
   }
   return { build };

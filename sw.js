@@ -1,5 +1,5 @@
 // Offline cache: app shell + libraries. API calls (AI, Google) always go to the network.
-const VERSION = "v9";
+const VERSION = "v10";
 const SHELL = ["./", "index.html", "app.css", "app.js", "core.js", "template.js", "ai.js", "drive.js", "importer.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js", "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"];

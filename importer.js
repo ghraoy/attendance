@@ -157,8 +157,31 @@ window.Importer = (() => {
       R.students.push({ id: "t" + Core.uid(), name, start: toYMD(r[2]) || R.calendar.start || "", exempt });
     }
     const ar = rowsOf(wb, "الحضور");
-    const p = plan(R, ar ? readTable(ar, "") : []);
+    const p = plan(R, [...(ar ? readTable(ar, "") : []), ...readKashf(wb, R)]);
     return { R: { ...p.next, meta: R.meta, calendar: R.calendar, rules: R.rules, id: R.id, createdAt: R.createdAt }, plan: p };
+  }
+
+  // attendance grids "كشف n": students in rows, lecture dates in columns, marks غ / م / ح
+  function readKashf(wb, R) {
+    const recs = [], MARK = { "غ": "A", "م": "X", "ح": "P" };
+    for (const name of wb.SheetNames.filter(n => /^كشف\s*\d+/.test(n))) {
+      const idx = +name.match(/\d+/)[0] - 1, rows = rowsOf(wb, name) || [];
+      const subjectName = String((rows[2] || [])[2] || "").trim() || (R.subjects[idx] || {}).name;
+      if (!subjectName) continue;
+      const head = rows[3] || [], cols = [];
+      for (let c = 3; c < head.length; c++) { const d = toYMD(head[c]); if (d) cols.push([c, d]); }
+      const studentRows = rows.slice(7).map((r, i) => ({ r, name: String(r[1] || "").trim() || (R.students[i] || {}).name })).filter(x => x.name);
+      for (const [c, d] of cols) {
+        const marks = {};
+        for (const { r, name: nm } of studentRows) { const v = MARK[String(r[c] ?? "").trim()]; if (v) marks[nm] = v; }
+        if (Object.keys(marks).length) {
+          // a held lecture: students left blank count as present
+          for (const { name: nm } of studentRows) if (!marks[nm]) marks[nm] = "P";
+          recs.push({ date: d, subjectName, marks, note: "" });
+        }
+      }
+    }
+    return recs;
   }
 
   function template() {

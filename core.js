@@ -99,9 +99,9 @@ const Core = (() => {
   function status(R, se, stu) {
     if (stu.start && se.date < stu.start) return "N";
     if ((stu.exempt || []).includes(se.subject)) return "E";
-    if ((se.excused || []).includes(stu.id)) return R.rules.countExcused ? "A" : "X";
+    if ((se.excused || []).includes(stu.id)) return R.rules.countExcused && isDuty(R, se.date) && !isHoliday(R, se.date) ? "A" : "X";
     const absent = (se.absent || []).includes(stu.id);
-    if (absent && !isDuty(R, se.date)) return "N"; // absence on a no-duty day is not counted
+    if (absent && (!isDuty(R, se.date) || isHoliday(R, se.date))) return "N"; // absence on a no-duty day or a holiday is not counted
     return absent ? "A" : "P";
   }
   function stats(R, stuId, subId) {
