@@ -75,31 +75,48 @@ window.Importer = (() => {
   }
 
   // Turn records into a plan against the current state (nothing is changed until apply()).
-  function plan(S, recs) {
+  // Merge key = date + subject: a lecture already in the register (same date, same subject) is updated, never duplicated.
+  // mode "replace": the file's marks win for that lecture · mode "add": only add absences / leaves, never clear existing ones.
+  function plan(S, recs, mode = "replace") {
     S = { ...S, subjects: S.subjects || [], students: S.students || [], sessions: S.sessions || [] };
     const newSubjects = [], newStudents = [], uid = () => Math.random().toString(36).slice(2, 9);
     const subjects = [...S.subjects], students = S.students.map(x => ({ ...x, exempt: [...(x.exempt || [])] }));
     const sub = (n, m = {}) => { let s = matchBy(subjects, n); if (!s) { s = { id: "s" + uid(), name: n, teacher: m.teacher || "", hours: m.hours > 0 ? m.hours : 2 }; subjects.push(s); newSubjects.push(s); } return s; };
     const stu = (n, date, noStart) => { let s = matchBy(students, n); if (!s) { s = { id: "t" + uid(), name: n, start: noStart ? "9999-12-31" : date, exempt: [] }; students.push(s); newStudents.push(s); } else if (!noStart && newStudents.includes(s) && date < s.start) s.start = date; return s; };
-    const exempt = [];
+    const exempt = [], dupes = [], rankM = { P: 0, X: 1, A: 2 };
     const byKey = new Map();
     for (const r of recs) {
       const s = sub(r.subjectName, r.meta), k = r.date + "|" + s.id;
       const e = byKey.get(k) || { date: r.date, subject: s.id, marks: {}, note: r.note };
-      for (const [n, st] of Object.entries(r.marks)) { if (st === "E") { const x = stu(n, r.date, true); exempt.push([x, s.id]); } else e.marks[stu(n, r.date).id] = st; }
+      for (const [n, st] of Object.entries(r.marks)) {
+        if (st === "E") { const x = stu(n, r.date, true); exempt.push([x, s.id]); continue; }
+        const id = stu(n, r.date).id, was = e.marks[id];
+        if (was && was !== st) { dupes.push({ date: r.date, subject: s.name, student: n }); if (rankM[st] < rankM[was]) continue; } // same lecture twice in the file: keep the stronger mark (A > X > P)
+        e.marks[id] = st;
+      }
       if (r.note && !e.note) e.note = r.note;
       byKey.set(k, e);
     }
     const newExempt = [];
     for (const [st, sid] of exempt) if (!st.exempt.includes(sid)) { st.exempt.push(sid); newExempt.push(st.name + " ← " + subjects.find(x => x.id === sid).name); }
-    let created = 0, updated = 0, absences = 0; const sessions = S.sessions.map(x => ({ ...x, absent: [...(x.absent || [])], excused: [...(x.excused || [])] }));
+    let created = 0, updated = 0, unchanged = 0, absences = 0; const conflicts = []; const sessions = S.sessions.map(x => ({ ...x, absent: [...(x.absent || [])], excused: [...(x.excused || [])] }));
     for (const e of byKey.values()) {
-      let s = sessions.find(x => x.date === e.date && x.subject === e.subject);
-      if (s) updated++; else { s = { id: "x" + uid(), date: e.date, subject: e.subject, note: e.note || "", absent: [], excused: [] }; sessions.push(s); created++; }
-      for (const [id, st] of Object.entries(e.marks)) { s.absent = s.absent.filter(x => x !== id); s.excused = s.excused.filter(x => x !== id); if (st === "A") { s.absent.push(id); absences++; } if (st === "X") s.excused.push(id); }
+      let s = sessions.find(x => x.date === e.date && x.subject === e.subject), isNew = false;
+      if (!s) { s = { id: "x" + uid(), date: e.date, subject: e.subject, note: e.note || "", absent: [], excused: [] }; sessions.push(s); isNew = true; }
+      const before = JSON.stringify([[...s.absent].sort(), [...s.excused].sort()]);
+      for (const [id, st] of Object.entries(e.marks)) {
+        const cur = s.absent.includes(id) ? "A" : s.excused.includes(id) ? "X" : "P";
+        if (st === "A") absences++;
+        if (cur === st) continue;
+        if (!isNew) conflicts.push({ date: e.date, subject: subjects.find(x => x.id === e.subject).name, student: students.find(x => x.id === id).name, from: cur, to: st, kept: mode === "add" && st === "P" });
+        if (mode === "add" && st === "P") continue; // never clear an absence already recorded
+        s.absent = s.absent.filter(x => x !== id); s.excused = s.excused.filter(x => x !== id);
+        if (st === "A") s.absent.push(id); if (st === "X") s.excused.push(id);
+      }
       if (e.note && !s.note) s.note = e.note;
+      if (isNew) created++; else if (JSON.stringify([[...s.absent].sort(), [...s.excused].sort()]) !== before) updated++; else unchanged++;
     }
-    return { created, updated, absences, newSubjects, newStudents, newExempt: [...new Set(newExempt)], next: { ...S, subjects, students, sessions } };
+    return { mode, recs, created, updated, unchanged, conflicts, dupes, absences, newSubjects, newStudents, newExempt: [...new Set(newExempt)], next: { ...S, subjects, students, sessions } };
   }
 
   /* ----- full register template (sheets: الإعدادات، العطل، المواد، الطلبة، الحضور) ----- */

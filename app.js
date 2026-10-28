@@ -186,19 +186,28 @@ function logView() {
 }
 
 /* ===== import ===== */
+const MK = { P: "حاضر", A: "غائب", X: "مجاز" };
+const tpSame = () => ui.tplPreview && DB.registers.find(r => Core.registerName(r) === Core.registerName(ui.tplPreview.R));
 function importView() {
   const pv = ui.preview, tp = ui.tplPreview;
   const tpl = tp ? `<div class="panel" style="border-color:var(--accent)"><h3>سجل جديد من نموذج Excel</h3>
     <div class="small"><b>${esc(Core.registerName(tp.R))}</b><br>${esc(tp.R.meta.university)} · ${esc(tp.R.meta.college)}<br>
     ${tp.R.subjects.length} مادة · ${tp.R.students.length} طالب · ${tp.plan.created} محاضرة مسجّلة · ${tp.plan.absences} غياب · الفصل ${fmtDate(tp.R.calendar.start)} – ${fmtDate(tp.R.calendar.end)}</div>
     ${tp.R.subjects.filter(s => !(s.slots || []).length).length ? `<div class="banner">${tp.R.subjects.filter(s => !(s.slots || []).length).length} مادة بلا جدول أسبوعي؛ ستُحسب ساعاتها من «ساعات المحاضرة × محاضرات الأسبوع».</div>` : ""}
-    <div class="row"><button class="btn primary" id="tplApply" type="button">إنشاء السجل</button>${R() ? `<button class="btn" id="tplMerge" type="button">دمج الحضور فقط في السجل الحالي</button>` : ""}<button class="btn" id="tplCancel" type="button">إلغاء</button></div></div>` : "";
+    ${tpSame() ? `<div class="banner">هذا السجل موجود مسبقاً لديك («${esc(Core.registerName(tpSame()))}»). اختر «دمج» ليُضاف الجديد فقط حسب التاريخ والمادة دون تكرار.</div>` : ""}
+    <div class="row">${tpSame() ? `<button class="btn primary" id="tplMerge" type="button">دمج في السجل الموجود</button><button class="btn" id="tplApply" type="button">إنشاء سجل منفصل</button>` : `<button class="btn primary" id="tplApply" type="button">إنشاء السجل</button>${R() ? `<button class="btn" id="tplMerge" type="button">دمج الحضور فقط في السجل الحالي</button>` : ""}`}<button class="btn" id="tplCancel" type="button">إلغاء</button></div></div>` : "";
   const preview = pv ? `<div class="panel" style="border-color:var(--accent)"><h3>معاينة قبل الحفظ</h3>
-    <div class="small">${pv.created} محاضرة جديدة · ${pv.updated} محاضرة موجودة ستُحدَّث · ${pv.absences} غياب</div>
+    <div class="small">المطابقة بالتاريخ + المادة، فلا تتكرر محاضرة موجودة: <b>${pv.created}</b> محاضرة جديدة · <b>${pv.updated}</b> موجودة ستتغير · <b>${pv.unchanged}</b> موجودة مطابقة (لا تغيير) · ${pv.absences} غياب في الملف</div>
+    ${pv.conflicts.length ? `<div class="banner"><b>${pv.conflicts.length} اختلاف</b> بين الملف وما في السجل لنفس التاريخ والمادة:
+      <label style="display:block;margin:6px 0"><select id="impMode"><option value="replace" ${pv.mode === "replace" ? "selected" : ""}>الملف هو الأحدث — اعتمد ما فيه</option><option value="add" ${pv.mode === "add" ? "selected" : ""}>أضف الغيابات والإجازات فقط — لا تمسح غياباً مسجلاً</option></select></label>
+      <div class="scroll" style="max-height:220px;overflow:auto;margin-top:6px"><table><tr><th>التاريخ</th><th>المادة</th><th>الطالب</th><th>في السجل</th><th>في الملف</th><th>النتيجة</th></tr>
+      ${pv.conflicts.map(c => `<tr><td>${fmtDate(c.date)}</td><td>${esc(c.subject)}</td><td>${esc(c.student)}</td><td>${MK[c.from]}</td><td>${MK[c.to]}</td><td>${c.kept ? "يبقى " + MK[c.from] : MK[c.to]}</td></tr>`).join("")}</table></div></div>` : ""}
+    ${pv.dupes.length ? `<div class="banner">الملف فيه المحاضرة نفسها (تاريخ + مادة) أكثر من مرة بعلامات مختلفة لـ ${pv.dupes.length} حالة؛ اعتُمدت العلامة الأشد (غائب ثم مجاز ثم حاضر): ${pv.dupes.slice(0, 5).map(d => esc(d.student) + " " + fmtDate(d.date)).join("، ")}${pv.dupes.length > 5 ? "…" : ""}</div>` : ""}
     ${pv.newSubjects.length ? `<div class="banner">مواد جديدة ستُضاف (راجع ساعاتها وجدولها من الإعدادات): ${pv.newSubjects.map(s => esc(s.name)).join("، ")}</div>` : ""}
     ${pv.newStudents.length ? `<div class="banner">طلبة جدد: ${pv.newStudents.map(s => esc(s.name) + (s.start && s.start < "9999" ? " (من " + fmtDate(s.start) + ")" : "")).join("، ")}. إن كان الاسم مكتوباً بشكل مختلف لطالب موجود، صحّحه في الملف وأعد الاستيراد.</div>` : ""}
     ${(pv.newExempt || []).length ? `<div class="banner ok">مستوفون: ${pv.newExempt.map(esc).join("، ")}</div>` : ""}
-    ${!pv.created && !pv.updated ? `<div class="banner err">لم أجد محاضرات في الملف. تأكد أن فيه عموداً باسم «التاريخ».</div>` : ""}
+    ${!pv.created && !pv.updated && pv.unchanged ? `<div class="banner ok">كل ما في الملف موجود مسبقاً في السجل — لا شيء جديد.</div>` : ""}
+    ${!pv.created && !pv.updated && !pv.unchanged ? `<div class="banner err">لم أجد محاضرات في الملف. تأكد أن فيه عموداً باسم «التاريخ».</div>` : ""}
     <div class="row"><button class="btn primary" id="applyImp" type="button" ${!pv.created && !pv.updated ? "disabled" : ""}>حفظ في السجل</button><button class="btn" id="cancelImp" type="button">إلغاء</button></div></div>` : "";
   return `<section><h2>إدخال البيانات</h2><p class="muted small" style="margin:0">طرق الإدخال: «اليوم» حسب الجدول، أو زر «+ محاضرة»، أو نموذج Excel، أو لصق جدول، أو صورة ورقة الحضور.</p></section>
   ${tpl}${preview}
@@ -433,12 +442,12 @@ function bindImport() {
   if ($("#tplExport")) $("#tplExport").onclick = () => saveFile(`${Core.registerName(R())}.xlsx`, Template.build(R()), XLSX_TYPE);
   if ($("#tplApply")) {
     $("#tplApply").onclick = () => { const nr = ui.tplPreview.R; DB.registers.push(nr); DB.current = nr.id; ui.tplPreview = null; location.hash = "overview"; commit("أُنشئ السجل من النموذج"); };
-    if ($("#tplMerge")) $("#tplMerge").onclick = () => { const t = ui.tplPreview.R; const recs = []; for (const se of t.sessions) { const su = t.subjects.find(s => s.id === se.subject); const marks = {}; t.students.forEach(st => { marks[st.name] = (se.excused || []).includes(st.id) ? "X" : (se.absent || []).includes(st.id) ? "A" : "P"; }); recs.push({ date: se.date, subjectName: su.name, marks, note: se.note }); } ui.preview = Importer.plan(R(), recs); ui.tplPreview = null; render(); };
+    if ($("#tplMerge")) $("#tplMerge").onclick = () => { const t = ui.tplPreview.R; if (tpSame()) DB.current = tpSame().id; const recs = []; for (const se of t.sessions) { const su = t.subjects.find(s => s.id === se.subject); const marks = {}; t.students.forEach(st => { marks[st.name] = (se.excused || []).includes(st.id) ? "X" : (se.absent || []).includes(st.id) ? "A" : "P"; }); recs.push({ date: se.date, subjectName: su.name, marks, note: se.note }); } ui.preview = Importer.plan(R(), recs); ui.tplPreview = null; render(); };
     $("#tplCancel").onclick = () => { ui.tplPreview = null; render(); };
   }
   if ($("#photo")) $("#photo").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) readPhoto(f); };
   if ($("#pasteGo")) $("#pasteGo").onclick = () => { const t = $("#paste").value; if (!t.trim()) { toast("الصق الجدول أولاً"); return; } ui.preview = Importer.plan(R(), Importer.fromText(t, $("#pasteSub").value)); render(); };
-  if ($("#applyImp")) { $("#applyImp").onclick = () => { const pv = ui.preview, r = R(); Object.assign(r, { subjects: pv.next.subjects, students: pv.next.students, sessions: pv.next.sessions }); ui.preview = null; commit(`حُفظ: ${pv.created} محاضرة جديدة و${pv.updated} محدّثة`); }; $("#cancelImp").onclick = () => { ui.preview = null; render(); }; }
+  if ($("#applyImp")) { $("#applyImp").onclick = () => { const pv = ui.preview, r = R(); Object.assign(r, { subjects: pv.next.subjects, students: pv.next.students, sessions: pv.next.sessions }); ui.preview = null; commit(`حُفظ: ${pv.created} محاضرة جديدة و${pv.updated} محدّثة${pv.unchanged ? " و" + pv.unchanged + " بلا تغيير" : ""}`); }; if ($("#impMode")) $("#impMode").onchange = e => { const pv = ui.preview; ui.preview = Importer.plan(R(), pv.recs, e.target.value); render(); }; $("#cancelImp").onclick = () => { ui.preview = null; render(); }; }
   $("#bkSave").onclick = () => saveFile(`نسخة سجلات الحضور ${today()}.json`, JSON.stringify(DB, null, 1), "application/json");
   $("#bkLoad").onchange = async e => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -714,7 +723,7 @@ let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
 $("#installBtn").onclick = async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true; };
 window.addEventListener("appinstalled", () => toast("ثُبّت التطبيق"));
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });

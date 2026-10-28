@@ -46,6 +46,7 @@ h3{font-size:.95rem;margin:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .spacer{flex:1}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px;min-width:0}
+.panel>*{min-width:0}
 .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:6px}
