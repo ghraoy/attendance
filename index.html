@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
+<!-- © 2026 م.م. سجاد مهدي الغراوي — جميع الحقوق محفوظة -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>سجل الحضور الجامعي</title>
@@ -13,56 +14,52 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@600;800&display=swap">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.aee8b2f859.css">
+<script>
+(function(){try{var t=JSON.parse(localStorage.getItem("mtu-theme")||"null"),d=document.documentElement;if(t){d.dataset.theme=t.dark?"dark":"light";d.style.setProperty("--accent",t.accent);d.style.setProperty("--accent-ink",t.ink);d.dataset.motion=t.motion===false?"off":"on";d.dataset.size=t.size||"m";}else if(matchMedia("(prefers-color-scheme: dark)").matches)d.dataset.theme="dark";}catch(e){}})();</script>
 </head>
 <body>
 <header>
-  <div class="wrap">
-    <div class="top">
-      <div>
-        <h1>سجل الحضور الجامعي</h1>
-        <div class="sub" id="termLine"></div>
-      </div>
-      <div class="row">
-        <select id="regSel" class="regsel" aria-label="السجل الحالي" hidden></select>
-        <button class="save off" id="syncBtn" type="button" title="مزامنة Google Drive" style="border:0;background:none;cursor:pointer"><i></i><span>محفوظ على هذا الجهاز</span></button>
-        <button class="btn" id="installBtn" type="button" hidden>تثبيت التطبيق</button>
-        <button class="btn primary" id="addBtn" type="button">+ محاضرة</button>
-      </div>
-    </div>
-    <nav aria-label="الأقسام">
-      <a href="#overview">الملخص</a>
-      <a href="#today">اليوم</a>
-      <a href="#timetable">الجدول</a>
-      <a href="#log">الأرشيف</a>
-      <a href="#import">إدخال البيانات</a>
-      <a href="#ai">المساعد</a>
-      <a href="#setup">الإعدادات</a>
-    </nav>
-  </div>
+<div class="wrap">
+<div class="top">
+<a class="brand" href="#overview">
+<img id="hdrLogo" alt="" hidden>
+<div><h1>سجل الحضور الجامعي</h1><div class="sub" id="termLine"></div></div>
+</a>
+<div class="row tools">
+<select id="regSel" class="regsel" aria-label="السجل الحالي" hidden></select>
+<button class="save off" id="syncBtn" type="button" title="مزامنة Google Drive" style="border:0;background:none;cursor:pointer"><i></i><span>محفوظ على هذا الجهاز</span></button>
+<button class="iconbtn" id="searchBtn" type="button" title="بحث (Ctrl+K)" aria-label="بحث"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+<button class="iconbtn" id="themeBtn" type="button" title="المظهر" aria-label="تبديل المظهر"></button>
+<button class="btn" id="installBtn" type="button" hidden>تثبيت التطبيق</button>
+<button class="btn primary fab" id="addBtn" type="button" title="محاضرة جديدة (N)">+ محاضرة</button>
+</div>
+</div>
+<nav aria-label="الأقسام">
+<a href="#overview">الملخص</a>
+<a href="#today">اليوم</a>
+<a href="#timetable">الجدول</a>
+<a href="#log">الأرشيف</a>
+<a href="#import">إدخال البيانات</a>
+<a href="#ai">المساعد</a>
+<a href="#setup">الإعدادات</a>
+</nav>
+</div>
 </header>
-
 <main class="wrap" id="main">
-  <div class="empty">جارٍ فتح السجل…</div>
+<div class="empty">جارٍ فتح السجل…</div>
 </main>
-
 <footer class="appfoot wrap">
-  <div>برمجة وتصميم: <a href="#about"><b>م.م. سجاد مهدي الغراوي</b></a></div>
-  <div class="links">© 2026 جميع الحقوق محفوظة · <a href="#about">حول التطبيق</a> · <a href="terms.html">شروط الاستخدام</a> · <a href="privacy.html">الخصوصية</a> · <a href="license.html">الترخيص</a></div>
+<div>برمجة وتصميم: <a href="#about"><b>م.م. سجاد مهدي الغراوي</b></a></div>
+<div class="links">© 2026 جميع الحقوق محفوظة · <a href="#about">حول التطبيق</a> · <a href="terms.html">شروط الاستخدام</a> · <a href="privacy.html">الخصوصية</a> · <a href="license.html">الترخيص</a></div>
 </footer>
-
+<dialog id="searchDlg" class="search" aria-label="بحث"></dialog>
 <dialog id="consentDlg" class="consent"><form method="dialog" id="consentForm"></form></dialog>
 <dialog id="dlg"><form class="dlg" id="sessForm" method="dialog"></form></dialog>
 <div class="toast" id="toast" hidden></div>
 <div id="printArea"></div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-<script src="core.js"></script>
-<script src="template.js"></script>
-<script src="ai.js"></script>
-<script src="drive.js"></script>
-<script src="importer.js"></script>
-<script src="app.js"></script>
+<script src="app.95fddbfce1.js"></script>
 </body>
 </html>
