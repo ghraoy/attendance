@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>بطاقة الحضور</title>
+<meta name="theme-color" content="#0e6a66">
+<meta name="robots" content="noindex">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Kufi+Arabic:wght@600;800&display=swap">
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#eef3f2;font-family:"IBM Plex Sans Arabic",Tahoma,sans-serif;color:#152b3c}
+.wrap{width:min(560px,calc(100vw - 32px));display:grid;gap:14px;padding:24px 0;text-align:center}
+img{width:100%;border-radius:18px;box-shadow:0 12px 34px rgb(16 40 50 / .18);background:#fff}
+h1{font-family:"Noto Kufi Arabic",sans-serif;font-size:1.2rem;margin:0}
+p{margin:0;color:#5a6b72;font-size:.92rem;line-height:1.7}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:11px 20px;cursor:pointer;background:#0e6a66;color:#fff}
+button.alt{background:#fff;color:#0e6a66;border:1px solid #cfdcda}
+.foot{font-size:.75rem;color:#8a989c}
+.err{background:#fbe5e6;color:#b3262f;border-radius:12px;padding:14px}
+</style>
+</head>
+<body>
+<div class="wrap" id="w">
+<h1>بطاقة الحضور</h1>
+<img id="card" alt="بطاقة الحضور">
+<p>اعرض هذه البطاقة على الأستاذ ليمسحها في بداية كل محاضرة. احفظها في معرض الصور، أو أضف هذه الصفحة إلى الشاشة الرئيسية.</p>
+<div class="row"><button id="save" type="button">حفظ الصورة</button><button class="alt" id="share" type="button" hidden>مشاركة</button></div>
+<p class="foot">سجل الحضور الجامعي — برمجة وتصميم م.م. سجاد مهدي الغراوي</p>
+</div>
+<script src="card.js"></script>
+<script>
+(async () => {
+const q = new URLSearchParams(location.hash.slice(1)), info = { name: q.get("n") || "", code: (q.get("c") || "").toUpperCase(), line1: q.get("a") || "", line2: q.get("b") || "", uniNo: q.get("u") || "", accent: /^#[0-9a-f]{6}$/i.test(q.get("k") || "") ? q.get("k") : "#0e6a66" };
+if (!info.name || !/^[A-Z0-9]{6,12}$/.test(info.code)) { document.getElementById("w").innerHTML = '<div class="err">الرابط غير مكتمل. اطلب من القسم إرسال رابط بطاقتك من جديد.</div>'; return; }
+document.title = "بطاقة الحضور — " + info.name;
+try {
+const c = await Card.draw(info), blob = await Card.toBlob(c), url = URL.createObjectURL(blob), file = new File([blob], "بطاقة الحضور - " + info.name + ".png", { type: "image/png" });
+document.getElementById("card").src = url;
+document.getElementById("save").onclick = () => { const a = document.createElement("a"); a.href = url; a.download = file.name; a.click(); };
+if (navigator.canShare && navigator.canShare({ files: [file] })) { const b = document.getElementById("share"); b.hidden = false; b.onclick = () => navigator.share({ files: [file], title: "بطاقة الحضور" }).catch(() => {}); }
+} catch (e) { document.getElementById("w").insertAdjacentHTML("beforeend", '<div class="err">' + e.message + '</div>'); }
+})();
+</script>
+</body>
+</html>
