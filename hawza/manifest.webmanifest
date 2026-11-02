@@ -1,0 +1,26 @@
+{
+  "name": "سجل الحضور الحوزوي",
+  "short_name": "حضور الحوزة",
+  "description": "سجل حضور وغياب طلبة الحوزة العلمية للمراحل السبع: الدرس والمباحثة، التاريخ الهجري والمناسبات، حساب الساعات والإنذارات، والمزامنة مع Google Drive — برمجة وتصميم: م.م. سجاد مهدي الغراوي",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f3ee",
+  "theme_color": "#1d5c45",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
